@@ -11,7 +11,7 @@ This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is par
 
 ## What works today
 
-Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`) and a script that sets up the Databricks workspace, described in [docs/setup.md](docs/setup.md). No data pipeline yet. The first one, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
+Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`), a script that sets up the Databricks workspace (see [docs/setup.md](docs/setup.md)) and a shared HTTP client in `ingestion/http.py`. The client retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After`, fails fast on other 4xx, spaces out calls and logs one JSON line per attempt. No data pipeline yet. The first one, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
 
 ## Architecture
 
