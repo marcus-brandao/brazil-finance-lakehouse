@@ -1,5 +1,6 @@
 # brazil-finance-lakehouse
 
+[![CI](https://github.com/marcus-brandao/brazil-finance-lakehouse/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/marcus-brandao/brazil-finance-lakehouse/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -29,6 +30,8 @@ uv run python -m ingestion.upload pull
 uv run python -m ingestion.sgs incremental
 uv run python -m ingestion.upload push
 ```
+
+Every pull request and every push to `main` runs `make lint` and `make test` on GitHub Actions ([ci.yml](.github/workflows/ci.yml)). The run summary shows the coverage table. Tests mock HTTP, so CI needs no secrets and no access to BCB or Databricks. One test runs the SGS CLI end to end (backfill, then incremental) against a mocked API.
 
 Nothing runs on a schedule yet and the bronze job does not exist, so bronze is still empty. The first pipeline, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
 
@@ -79,7 +82,7 @@ Solid: the M1 path, in progress. Dashed: planned for later milestones.
 | Platform | Databricks Free Edition: Unity Catalog, Delta, Auto Loader | [ADR-0001](docs/adr/0001-platform.md) | 🚧 in progress · M1 |
 | Transform | dbt | [ADR-0001](docs/adr/0001-platform.md) | ⬜ planned · M2 |
 | BI | Evidence, Databricks AI/BI dashboards | [ADR-0001](docs/adr/0001-platform.md) | ⬜ planned · M3 |
-| Quality | ruff, pytest, pre-commit | Standard Python tooling, no ADR | ✅ built |
+| Quality | ruff, pytest, pytest-cov, pre-commit, GitHub Actions CI | Standard Python tooling, no ADR | ✅ built |
 
 All decisions are in [`docs/adr/`](docs/adr/).
 

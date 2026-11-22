@@ -369,8 +369,10 @@ def test_incremental_without_a_watermark_asks_for_a_backfill(tmp_path):
     assert "backfill" in str(e.value)
 
 
-def test_main_runs_a_backfill_from_the_command_line(tmp_path, monkeypatch):
-    h = fake_api({(11, 2024): [row("02/01/2024")]})
+def test_cli_backfill_then_incremental_against_mocked_http(tmp_path, monkeypatch):
+    # The CI dry run: the real series config and the real CLI, with HTTP mocked.
+    codes = [s["code"] for s in load_series()]
+    h = fake_api({(code, 2024): [row("02/12/2024")] for code in codes})
     real_client = HttpClient
     monkeypatch.setattr(
         "ingestion.sgs.HttpClient",
@@ -378,16 +380,19 @@ def test_main_runs_a_backfill_from_the_command_line(tmp_path, monkeypatch):
             user_agent, transport=httpx.MockTransport(h), sleep=lambda s: None
         ),
     )
-    monkeypatch.setattr("ingestion.sgs.load_series", lambda: [DAILY])
-    main(
-        [
-            "--out",
-            str(tmp_path),
-            "backfill",
-            "--from",
-            "2024-01-01",
-            "--to",
-            "2024-12-31",
-        ]
+    out = ["--out", str(tmp_path)]
+
+    main([*out, "backfill", "--from", "2024-01-01", "--to", "2024-12-31"])
+    assert landing_files(tmp_path) == sorted(
+        [f"sgs/series_code={code}/year=2024.json" for code in codes]
+        + ["_state/sgs.json"]
     )
-    assert "sgs/series_code=11/year=2024.json" in landing_files(tmp_path)
+    for code in codes:
+        envelope = saved(tmp_path, code, 2024)
+        assert envelope["source"] == "bcb_sgs"
+        assert envelope["series_code"] == code
+        assert envelope["payload"] == [row("02/12/2024")]
+    assert read_state(tmp_path) == {str(code): "2024-12-02" for code in codes}
+
+    main([*out, "incremental"])
+    assert read_state(tmp_path) == {str(code): "2024-12-02" for code in codes}
