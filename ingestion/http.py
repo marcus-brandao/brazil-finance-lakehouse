@@ -24,12 +24,18 @@ def parse_retry_after(resp: httpx.Response) -> float | None:
 
 class HttpError(Exception):
     def __init__(
-        self, message: str, url: str, status: int | None = None, attempts: int = 1
+        self,
+        message: str,
+        url: str,
+        status: int | None = None,
+        attempts: int = 1,
+        body: str = "",
     ):
         super().__init__(message)
         self.url = url
         self.status = status
         self.attempts = attempts
+        self.body = body
 
 
 class HttpClient:
@@ -70,19 +76,22 @@ class HttpClient:
         for attempt in range(1, self.max_attempts + 1):
             self._wait_for_slot()
             retry_after = None
+            body = ""
             try:
                 resp = self._client.get(url, params=params)
             except httpx.TransportError as e:
                 status, error = None, f"{type(e).__name__}: {e}"
             else:
                 status = resp.status_code
-                if status < 400:
+                # Redirects are not followed, so a 3xx is an error, not data.
+                if status < 300:
                     self._log(attempt, status, 0, url)
                     return resp
-                error = f"HTTP {status}: {resp.text[:200]}"
+                body = resp.text
+                error = f"HTTP {status}: {body[:200]}"
                 if not is_retryable(status):
                     self._log(attempt, status, 0, url)
-                    raise HttpError(error, url, status, attempt)
+                    raise HttpError(error, url, status, attempt, body)
                 if status == 429:
                     retry_after = parse_retry_after(resp)
 
@@ -93,6 +102,7 @@ class HttpClient:
                     url,
                     status,
                     attempt,
+                    body,
                 )
             delay = self._delay(attempt, retry_after)
             self._log(attempt, status, delay, url)
