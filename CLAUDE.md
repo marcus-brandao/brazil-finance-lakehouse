@@ -41,6 +41,7 @@ tests/
 ## Conventions
 
 - Python 3.12, type hints on public functions, ruff for lint and format.
+- Write code a new reader can follow on the first pass: plain functions, a straight flow, shallow nesting. Avoid clever structures, hidden control flow and abstractions with a single user. Names carry the meaning, so simple code needs few comments. If a simpler version does the same job, use it.
 - Comments: short and practical, explaining *why*. No docstring blocks unless asked.
 - Connectors must be **idempotent** (same window → same output path), retry with bounded backoff, and never swallow errors silently.
 - Bronze is append-only and keeps raw payloads untouched in an envelope; dedup and typing happen in silver.
