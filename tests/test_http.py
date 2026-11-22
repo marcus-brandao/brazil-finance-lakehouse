@@ -93,6 +93,33 @@ def test_4xx_fails_fast_with_status_url_and_body():
     assert len(h.seen) == 1
 
 
+def test_3xx_raises_without_retry():
+    ft = FakeTime()
+    h = sequence(httpx.Response(307, headers={"Location": "https://example.test/x"}))
+    with make_client(h, ft) as c, pytest.raises(HttpError) as e:
+        c.get(URL)
+    assert e.value.status == 307
+    assert e.value.attempts == 1
+    assert len(h.seen) == 1
+    assert ft.sleeps == []
+
+
+def test_error_carries_full_response_body():
+    ft = FakeTime()
+    h = sequence(httpx.Response(404, text="y" * 500))
+    with make_client(h, ft) as c, pytest.raises(HttpError) as e:
+        c.get(URL)
+    assert e.value.body == "y" * 500
+
+
+def test_error_after_retries_carries_last_body():
+    ft = FakeTime()
+    h = sequence(httpx.Response(503, text="first"), httpx.Response(503, text="last"))
+    with make_client(h, ft, max_attempts=2) as c, pytest.raises(HttpError) as e:
+        c.get(URL)
+    assert e.value.body == "last"
+
+
 def test_retry_after_honored_on_429():
     ft = FakeTime()
     h = sequence(httpx.Response(429, headers={"Retry-After": "7"}), httpx.Response(200))

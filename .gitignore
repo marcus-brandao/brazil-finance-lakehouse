@@ -8,3 +8,4 @@ __pycache__/
 data/
 *.parquet
 *.csv
+out/

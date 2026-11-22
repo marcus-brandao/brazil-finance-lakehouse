@@ -11,7 +11,18 @@ This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is par
 
 ## What works today
 
-Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`), a script that sets up the Databricks workspace (see [docs/setup.md](docs/setup.md)) and a shared HTTP client in `ingestion/http.py`. The client retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After`, fails fast on other 4xx, spaces out calls and logs one JSON line per attempt. No data pipeline yet. The first one, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
+Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`), a script that sets up the Databricks workspace (see [docs/setup.md](docs/setup.md)), a shared HTTP client in `ingestion/http.py` and a BACEN SGS connector in `ingestion/sgs.py`.
+
+The HTTP client retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After`, fails fast on other 4xx and on redirects, spaces out calls and logs one JSON line per attempt.
+
+The SGS connector fetches series 432, 11, 12 and 433 (listed in `ingestion/config/sgs.toml`) into `out/`, one file per series and calendar year at `sgs/series_code=<code>/year=<yyyy>.json`, with the raw payload inside a wrapper that records the window, `ingested_at` and `run_id`. Re-running a window overwrites the same file. `backfill` takes a range and `incremental` starts from the stored watermark minus a per-series lookback, so revised values are picked up. See [ADR-0002](docs/adr/0002-sgs-windows-and-watermark.md).
+
+```
+uv run python -m ingestion.sgs backfill --from 2000-01-01
+uv run python -m ingestion.sgs incremental
+```
+
+Nothing uploads to Databricks yet (#12), so bronze is still empty. The first pipeline, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
 
 ## Architecture
 
