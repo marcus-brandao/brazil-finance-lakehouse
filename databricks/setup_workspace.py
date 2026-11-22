@@ -3,7 +3,7 @@
 import os
 
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.errors import AlreadyExists, DatabricksError
+from databricks.sdk.errors import AlreadyExists, DatabricksError, NotFound
 from databricks.sdk.service.catalog import VolumeType
 
 SCHEMAS = ("bronze", "silver", "gold")
@@ -14,11 +14,18 @@ FALLBACK_CATALOG = "workspace"
 def _ignore_exists(create, *args, **kwargs) -> None:
     try:
         create(*args, **kwargs)
-    except AlreadyExists:
-        pass
+    except DatabricksError as e:
+        # Schemas and Volumes report a duplicate as BadRequest, not AlreadyExists.
+        if not isinstance(e, AlreadyExists) and "already exists" not in str(e).lower():
+            raise
 
 
 def ensure_catalog(w: WorkspaceClient, name: str) -> str:
+    try:
+        w.catalogs.get(name)
+        return name
+    except NotFound:
+        pass
     try:
         _ignore_exists(w.catalogs.create, name=name)
     except DatabricksError as e:
