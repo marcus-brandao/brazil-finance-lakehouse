@@ -16,6 +16,7 @@ Batch + streaming lakehouse on Brazilian public financial data (BACEN, CVM). Sta
 - One branch per issue: `feat/<n>-short-name`, `chore/<n>-...`, `fix/<n>-...`.
 - Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `ci:`). Reference the issue; the PR body says `Closes #<n>`.
 - Small PRs, merged with a merge commit (squash is disabled on the repo). CI must be green before merge.
+- Small known shortcuts go in `docs/tech-debt.md` as one line each, not in issues. Remove the line when it is fixed.
 - Only the next milestone gets story-level detail. Do not pre-build later milestones.
 - Non-trivial change: give a short plan (a few lines) and wait for a go before writing code. Ask a guiding question when a decision is open; don't pad with options nobody asked for.
 

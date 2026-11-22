@@ -9,6 +9,8 @@ from databricks.sdk.service.catalog import VolumeType
 SCHEMAS = ("bronze", "silver", "gold")
 # Default catalog of a Free Edition workspace, used when CREATE CATALOG is refused.
 FALLBACK_CATALOG = "workspace"
+# What Free Edition answers to CREATE CATALOG (see docs/setup.md).
+NO_STORAGE_ROOT = "Metastore storage root URL does not exist"
 
 
 def _ignore_exists(create, *args, **kwargs) -> None:
@@ -29,9 +31,10 @@ def ensure_catalog(w: WorkspaceClient, name: str) -> str:
     try:
         _ignore_exists(w.catalogs.create, name=name)
     except DatabricksError as e:
-        # Fail loudly if the fallback catalog is missing too.
+        if NO_STORAGE_ROOT not in str(e):
+            raise
         print(f"Cannot create catalog {name!r} ({e}); using {FALLBACK_CATALOG!r}")
-        w.catalogs.get(FALLBACK_CATALOG)
+        w.catalogs.get(FALLBACK_CATALOG)  # raises if the fallback is missing too
         return FALLBACK_CATALOG
     return name
 
