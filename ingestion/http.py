@@ -9,7 +9,17 @@ import httpx
 
 log = logging.getLogger("ingestion.http")
 
-RETRYABLE_STATUS = {429} | set(range(500, 600))
+
+def is_retryable(status: int) -> bool:
+    return status == 429 or 500 <= status < 600
+
+
+def parse_retry_after(resp: httpx.Response) -> float | None:
+    # Only the seconds form is read; an HTTP date falls back to backoff.
+    try:
+        return float(resp.headers["Retry-After"])
+    except (KeyError, ValueError):
+        return None
 
 
 class HttpError(Exception):
@@ -36,6 +46,8 @@ class HttpClient:
         jitter: Callable[[], float] = random.random,
         transport: httpx.BaseTransport | None = None,
     ):
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
         self.max_attempts = max_attempts
         self.base_delay = base_delay
         self.max_delay = max_delay
@@ -55,50 +67,42 @@ class HttpClient:
         self._client.close()
 
     def get(self, url: str, params: dict | None = None) -> httpx.Response:
-        last_error = "no attempts made"
-        last_status: int | None = None
         for attempt in range(1, self.max_attempts + 1):
             self._wait_for_slot()
-            delay = 0.0
-            exc: Exception | None = None
+            retry_after = None
             try:
                 resp = self._client.get(url, params=params)
             except httpx.TransportError as e:
-                exc = e
-                last_status, last_error = None, f"{type(e).__name__}: {e}"
+                status, error = None, f"{type(e).__name__}: {e}"
             else:
-                if resp.status_code < 400:
-                    self._log(attempt, resp.status_code, 0, url)
+                status = resp.status_code
+                if status < 400:
+                    self._log(attempt, status, 0, url)
                     return resp
-                last_status = resp.status_code
-                last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
-                if resp.status_code not in RETRYABLE_STATUS:
-                    self._log(attempt, resp.status_code, 0, url)
-                    raise HttpError(last_error, url, resp.status_code, attempt)
+                error = f"HTTP {status}: {resp.text[:200]}"
+                if not is_retryable(status):
+                    self._log(attempt, status, 0, url)
+                    raise HttpError(error, url, status, attempt)
+                if status == 429:
+                    retry_after = parse_retry_after(resp)
 
-            if attempt < self.max_attempts:
-                delay = self._delay(attempt, resp if exc is None else None)
-            self._log(attempt, last_status, delay, url)
-            if attempt < self.max_attempts:
-                self._sleep(delay)
+            if attempt == self.max_attempts:
+                self._log(attempt, status, 0, url)
+                raise HttpError(
+                    f"gave up after {attempt} attempts on {url}: {error}",
+                    url,
+                    status,
+                    attempt,
+                )
+            delay = self._delay(attempt, retry_after)
+            self._log(attempt, status, delay, url)
+            self._sleep(delay)
 
-        raise HttpError(
-            f"gave up after {self.max_attempts} attempts on {url}: {last_error}",
-            url,
-            last_status,
-            self.max_attempts,
-        )
-
-    def _delay(self, attempt: int, resp: httpx.Response | None) -> float:
-        # Only the seconds form of Retry-After is read; a date falls back to backoff.
-        if resp is not None and resp.status_code == 429:
-            try:
-                return min(float(resp.headers["Retry-After"]), self.max_delay)
-            except (KeyError, ValueError):
-                pass
-        return (
-            min(self.max_delay, self.base_delay * 2 ** (attempt - 1)) * self._jitter()
-        )
+    def _delay(self, attempt: int, retry_after: float | None) -> float:
+        if retry_after is not None:
+            return min(retry_after, self.max_delay)
+        backoff = min(self.max_delay, self.base_delay * 2 ** (attempt - 1))
+        return backoff * self._jitter()
 
     def _wait_for_slot(self) -> None:
         now = self._clock()

@@ -155,3 +155,8 @@ def test_one_json_log_line_per_attempt(caplog):
         {"attempt": 1, "status": 503, "delay": 1.0, "url": URL},
         {"attempt": 2, "status": 200, "delay": 0, "url": URL},
     ]
+
+
+def test_max_attempts_must_be_positive():
+    with pytest.raises(ValueError):
+        HttpClient(user_agent="test-agent", max_attempts=0)
