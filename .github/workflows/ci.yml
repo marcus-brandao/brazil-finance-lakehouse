@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          version: "0.13.9"
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: make lint
+      - run: make test
+      # make test leaves .coverage behind, even when a test failed
+      - if: ${{ !cancelled() }}
+        run: uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
