@@ -44,5 +44,7 @@ def setup(w: WorkspaceClient, catalog: str) -> str:
 
 
 if __name__ == "__main__":
-    used = setup(WorkspaceClient(), os.environ.get("DATABRICKS_CATALOG", "lakehouse"))
+    used = setup(
+        WorkspaceClient(), os.environ.get("DATABRICKS_CATALOG", FALLBACK_CATALOG)
+    )
     print(f"Ready: {used}.bronze.landing")

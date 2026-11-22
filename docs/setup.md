@@ -16,7 +16,7 @@ In the workspace, open your user menu, then Settings, Developer, Access tokens, 
 cp .env.example .env
 ```
 
-Fill in `DATABRICKS_HOST` and `DATABRICKS_TOKEN` in `.env`. The file is gitignored. `DATABRICKS_CATALOG` is optional and defaults to `lakehouse`.
+Fill in `DATABRICKS_HOST` and `DATABRICKS_TOKEN` in `.env`. The file is gitignored. `DATABRICKS_CATALOG` is optional and defaults to `workspace`, the catalog every Free Edition workspace starts with.
 
 ## 4. Create the objects
 
@@ -28,11 +28,11 @@ uv run python databricks/setup_workspace.py
 
 The script creates:
 
-- catalog `lakehouse`, or, if Free Edition refuses `CREATE CATALOG`, the schemas go under the default `workspace` catalog instead
+- the catalog named by `DATABRICKS_CATALOG`. On Free Edition the API refuses `CREATE CATALOG` ("Metastore storage root URL does not exist"), so a new catalog name falls back to `workspace`. To use your own catalog, create it in the Catalog UI with Default Storage and set the variable to its name.
 - schemas `bronze`, `silver` and `gold`
 - Volume `bronze.landing`, where the connectors upload raw files
 
-Rerunning it leaves existing objects alone. The last line prints the catalog it used, for example `Ready: lakehouse.bronze.landing`. Use that name in later steps.
+Rerunning it leaves existing objects alone. The last line prints the catalog it used, for example `Ready: workspace.bronze.landing`. Use that name in later steps.
 
 ## 5. Add GitHub secrets
 
