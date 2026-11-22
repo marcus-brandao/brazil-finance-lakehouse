@@ -11,7 +11,7 @@ This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is par
 
 ## What works today
 
-Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`), a script that sets up the Databricks workspace (see [docs/setup.md](docs/setup.md)), a shared HTTP client in `ingestion/http.py` and a BACEN SGS connector in `ingestion/sgs.py`.
+Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`), a script that sets up the Databricks workspace (see [docs/setup.md](docs/setup.md)), a shared HTTP client in `ingestion/http.py`, a BACEN SGS connector in `ingestion/sgs.py` and an uploader in `ingestion/upload.py`.
 
 The HTTP client retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After`, fails fast on other 4xx and on redirects, spaces out calls and logs one JSON line per attempt.
 
@@ -22,7 +22,15 @@ uv run python -m ingestion.sgs backfill --from 2000-01-01
 uv run python -m ingestion.sgs incremental
 ```
 
-Nothing uploads to Databricks yet (#12), so bronze is still empty. The first pipeline, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
+The uploader moves `out/` to the landing Volume with the Databricks Files API. `pull` downloads `_state/sgs.json` first, so a run that starts on an empty disk can run `incremental`. `push` overwrites each file at the same relative path and uploads the state file last. `--dry-run` lists what it would upload and needs no credentials. It reads `DATABRICKS_HOST`, `DATABRICKS_TOKEN` and `DATABRICKS_CATALOG` from the environment.
+
+```
+uv run python -m ingestion.upload pull
+uv run python -m ingestion.sgs incremental
+uv run python -m ingestion.upload push
+```
+
+Nothing runs on a schedule yet and the bronze job does not exist, so bronze is still empty. The first pipeline, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
 
 ## Architecture
 

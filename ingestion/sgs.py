@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import tomllib
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -154,6 +155,7 @@ def main(argv: list[str] | None = None) -> None:
     modes.add_parser("incremental")
     args = parser.parse_args(argv)
 
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     now = datetime.now(UTC)
     run_id = uuid4().hex
     series_list = load_series()
