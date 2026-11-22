@@ -29,6 +29,8 @@ A proper architecture diagram is tracked in #17.
 | CI/CD | GitHub Actions |
 | Quality | ruff, pytest, pre-commit |
 
+Why this stack: [ADR-0001](docs/adr/0001-platform.md). All decisions are in [`docs/adr/`](docs/adr/).
+
 ## What works today
 
 Repo scaffolding only: `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`. No data pipeline yet; the first source (BACEN SGS) is milestone M1.
