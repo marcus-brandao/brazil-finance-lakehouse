@@ -33,6 +33,18 @@ A proper architecture diagram is tracked in #17.
 
 Repo scaffolding only: `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`. No data pipeline yet; the first source (BACEN SGS) is milestone M1.
 
+## Roadmap
+
+Tracked as [milestones](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestones) on the project board. Only the current milestone is broken down into stories.
+
+| | Milestone | Focus |
+|---|---|---|
+| **now** | M1 | Foundations, and BACEN SGS landing daily in bronze with full history |
+| | M2 | Silver and gold with dbt, plus more sources |
+| | M3 | BI and v1: Evidence site and AI/BI dashboards |
+| | M4 | PII and identity resolution, on synthetic seeded data |
+| | M5 | Streaming |
+
 ## Development
 
 ```bash
