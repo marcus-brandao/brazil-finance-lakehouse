@@ -48,6 +48,17 @@ tests/
 - Tests: mock HTTP, no network in unit tests. Cover edge cases (leap years, empty responses, window boundaries).
 - Data-source facts (API limits, series codes) must be verified against the official docs, not assumed. BACEN SGS date-range queries are capped at 10 years per request; the connector uses windows of at most 5 years.
 
+## Writing
+
+Invoke the `humanizer` skill (`/humanizer`, embedded mode) on every piece of prose before it leaves your machine, and use the result as the final text. Do not apply its rules from memory. Covers: commit messages (subject and body), PR titles and bodies, issue titles and bodies, comments on issues and PRs, README and other docs, ADRs, and code comments. Write for the reader, in the repo owner's voice, with no AI tells.
+
+- State the point directly. No "not X but Y" contrasts, no one-line closers that repeat the paragraph, no staged openers ("Here's the thing"), no aphorisms.
+- Name the specific thing: which file, series code, limit or decision. Cut inflated words (crucial, robust, pivotal, key, highlight) and sales language.
+- No em or en dashes. Use a period, comma, colon or parentheses.
+- No bold labels on list items, no decorative emoji or arrows, sentence-case headings.
+- Keep commit subjects short and plain. Put the why in the body only when it is not obvious from the diff.
+- Re-read the final text once more for forced triads and repeated sentence openings before committing, pushing or posting.
+
 ## Definition of done (every PR)
 
 - [ ] `make lint test` passes locally and in CI
@@ -55,3 +66,4 @@ tests/
 - [ ] README "What works today" updated if behavior changed
 - [ ] ADR added or updated if a decision was made
 - [ ] No secrets, raw data or employer-specific content
+- [ ] Humanizer pass done on commits, PR text, docs and comments
