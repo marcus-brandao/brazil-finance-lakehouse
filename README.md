@@ -11,7 +11,7 @@ This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is par
 
 ## What works today
 
-Repo scaffolding only: a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`. No data pipeline yet. The first one, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
+Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`) and a script that sets up the Databricks workspace, described in [docs/setup.md](docs/setup.md). No data pipeline yet. The first one, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
 
 ## Architecture
 

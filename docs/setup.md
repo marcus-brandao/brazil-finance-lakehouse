@@ -1,0 +1,43 @@
+# Setup
+
+How to get from nothing to a Databricks workspace with the catalog, schemas and landing Volume this project expects.
+
+## 1. Create the workspace
+
+Sign up for [Databricks Free Edition](https://docs.databricks.com/aws/en/getting-started/free-edition). It creates a workspace with serverless compute and default storage. Copy the workspace URL from the browser, for example `https://dbc-xxxx.cloud.databricks.com`.
+
+## 2. Create an access token
+
+In the workspace, open your user menu, then Settings, Developer, Access tokens, and generate a token. Copy it once, it is not shown again.
+
+## 3. Configure local env
+
+```bash
+cp .env.example .env
+```
+
+Fill in `DATABRICKS_HOST` and `DATABRICKS_TOKEN` in `.env`. The file is gitignored. `DATABRICKS_CATALOG` is optional and defaults to `lakehouse`.
+
+## 4. Create the objects
+
+```bash
+set -a && source .env && set +a
+uv sync
+uv run python databricks/setup_workspace.py
+```
+
+The script creates:
+
+- catalog `lakehouse`, or, if Free Edition refuses `CREATE CATALOG`, the schemas go under the default `workspace` catalog instead
+- schemas `bronze`, `silver` and `gold`
+- Volume `bronze.landing`, where the connectors upload raw files
+
+Rerunning it leaves existing objects alone. The last line prints the catalog it used, for example `Ready: lakehouse.bronze.landing`. Use that name in later steps.
+
+## 5. Add GitHub secrets
+
+Ingestion runs on GitHub Actions, so the workflows need the same credentials. In the repo, open Settings, Secrets and variables, Actions, and add `DATABRICKS_HOST` and `DATABRICKS_TOKEN`.
+
+## Rebuilding
+
+The workspace can be deleted or lost to inactivity. Repeat steps 1 to 5 on a new one. Nothing else in the repo depends on the old workspace.
