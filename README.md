@@ -72,7 +72,7 @@ These are the choices that shape the pipeline. Most of it is still being built, 
 - Connectors are idempotent and windowed. The same date window will always write to the same path, so a rerun overwrites instead of duplicating. BACEN SGS caps date-range queries at 10 years, so backfills will go in windows of at most 5 years.
 - Bronze is append-only, with the raw payload untouched. Auto Loader will keep it in an envelope. Dedup and typing will happen in silver, so a bug downstream can be fixed by replaying from bronze.
 - The Databricks workspace can be thrown away. Free Edition can shut compute down over quota or delete inactive accounts, so code, dbt models, dashboards and bundle config all live in git and can be redeployed into a fresh workspace.
-- Every non-obvious choice gets an ADR. Every change starts from an issue with a "Done when" list and lands as a small, squash-merged PR.
+- Every non-obvious choice gets an ADR. Every change starts from an issue with a "Done when" list and lands as a small PR merged with a merge commit.
 
 ## Roadmap
 

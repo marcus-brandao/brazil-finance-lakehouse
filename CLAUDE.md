@@ -15,7 +15,7 @@ Batch + streaming lakehouse on Brazilian public financial data (BACEN, CVM). Sta
 - Work is tracked as GitHub issues on the project board. Start from an issue; read its "Done when" list.
 - One branch per issue: `feat/<n>-short-name`, `chore/<n>-...`, `fix/<n>-...`.
 - Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `ci:`). Reference the issue; the PR body says `Closes #<n>`.
-- Small PRs, squash merge. CI must be green before merge.
+- Small PRs, merged with a merge commit (squash is disabled on the repo). CI must be green before merge.
 - Only the next milestone gets story-level detail. Do not pre-build later milestones.
 - Non-trivial change: give a short plan (a few lines) and wait for a go before writing code. Ask a guiding question when a decision is open; don't pad with options nobody asked for.
 
