@@ -50,7 +50,7 @@ tests/
 
 ## Writing
 
-Invoke the `humanizer` skill (`/humanizer`, embedded mode) on every piece of prose before it leaves your machine, and use the result as the final text. Do not apply its rules from memory. Covers: commit messages (subject and body), PR titles and bodies, issue titles and bodies, comments on issues and PRs, README and other docs, ADRs, and code comments. Write for the reader, in the repo owner's voice, with no AI tells.
+Invoke the `humanizer` skill (`/humanizer`, embedded mode) on every piece of prose before it leaves your machine, and use the result as the final text. Do not apply its rules from memory. A PreToolUse hook (`.claude/hooks/humanizer-check.py`) blocks commits and PR/issue text that contain dashes or attribution lines, but it cannot run the skill for you. Covers: commit messages (subject and body), PR titles and bodies, issue titles and bodies, comments on issues and PRs, README and other docs, ADRs, and code comments. Write for the reader, in the repo owner's voice, with no AI tells.
 
 - State the point directly. No "not X but Y" contrasts, no one-line closers that repeat the paragraph, no staged openers ("Here's the thing"), no aphorisms.
 - Name the specific thing: which file, series code, limit or decision. Cut inflated words (crucial, robust, pivotal, key, highlight) and sales language.
