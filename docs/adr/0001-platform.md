@@ -46,4 +46,5 @@ Ingestion runs outside Databricks because of the egress restriction. GitHub Acti
 - Quota shutdowns and the risk of deletion after inactivity mean the workspace isn't durable storage. Everything (code, dbt models, dashboards, bundle config) lives in git and can be redeployed into a fresh workspace.
 - Streaming (M5) is limited to what serverless and one pipeline per type allow. Revisit this ADR then.
 - Confirmed in a live workspace (2026-11-22): personal access tokens work, and the Databricks SDK can create schemas and Volumes through the REST API. The API cannot create a catalog ("Metastore storage root URL does not exist"), so the project uses the default `workspace` catalog.
-- Not yet confirmed: file uploads to a Volume from Actions, Auto Loader on serverless, Databricks Asset Bundles, and dbt against the Free Edition warehouse. The first M1 stories check these. If any is missing, this ADR gets updated.
+- File uploads to a Volume work: the Files API accepted overwrites with a personal access token, and a second upload of the same files left the same five paths (checked 2026-11-22 from a laptop, not yet from Actions, which #14 covers).
+- Not yet confirmed: Auto Loader on serverless, Databricks Asset Bundles, and dbt against the Free Edition warehouse. The first M1 stories check these. If any is missing, this ADR gets updated.
