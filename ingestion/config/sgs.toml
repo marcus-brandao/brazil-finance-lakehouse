@@ -1,0 +1,23 @@
+# lookback_days: how far before the watermark an incremental run starts, to pick up
+# revised values. Monthly series (433) are dated the 1st and revised after release,
+# so they need about three months.
+
+[[series]]
+code = 432
+name = "selic_target"
+lookback_days = 10
+
+[[series]]
+code = 11
+name = "selic_daily"
+lookback_days = 10
+
+[[series]]
+code = 12
+name = "cdi"
+lookback_days = 10
+
+[[series]]
+code = 433
+name = "ipca"
+lookback_days = 95
