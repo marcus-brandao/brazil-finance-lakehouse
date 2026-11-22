@@ -44,7 +44,6 @@ Tracked as [milestones](https://github.com/marcus-brandao/brazil-finance-lakehou
 | | M3 | BI and v1: Evidence site and AI/BI dashboards |
 | | M4 | PII and identity resolution, on synthetic seeded data |
 | | M5 | Streaming |
-| | M6 | Spark 2→3 / Hive SQL compatibility linter, a standalone tool in its own repo |
 
 ## Development
 
