@@ -1,6 +1,6 @@
 # brazil-finance-lakehouse
 
-Batch + streaming lakehouse on Brazilian public financial data (BACEN, CVM). Stack: Python, Databricks Free Edition (Unity Catalog, Delta, Auto Loader), dbt, Power BI, GitHub Actions. Goal: a public portfolio that shows modern data engineering practice. Quality of process matters as much as the code.
+Batch + streaming lakehouse on Brazilian public financial data (BACEN, CVM). Stack: Python, Databricks Free Edition (Unity Catalog, Delta, Auto Loader, AI/BI dashboards), dbt, Evidence, GitHub Actions. Goal: a public portfolio that shows modern data engineering practice. Quality of process matters as much as the code.
 
 ## Hard rules
 
@@ -33,7 +33,7 @@ Package manager is `uv` (`uv add`, `uv run`). Don't use `pip install` directly.
 ingestion/    connectors + uploader (run on GitHub Actions; Free Edition has restricted egress)
 databricks/   bronze jobs, later Asset Bundle config
 dbt/          models, tests, sources (M2)
-bi/           Power BI .pbip project (M3)
+bi/           Evidence site + AI/BI dashboard (M3)
 docs/adr/     architecture decision records
 tests/
 ```
