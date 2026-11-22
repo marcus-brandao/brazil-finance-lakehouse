@@ -5,7 +5,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A batch + streaming lakehouse on Brazilian public financial data (BACEN, CVM), built on Databricks Free Edition with dbt and GitHub Actions. The end goal: ask how the Selic rate has tracked inflation since the 90s, and get the answer from a tested pipeline instead of a spreadsheet.
+A batch + streaming lakehouse on Brazilian public financial data (BACEN, CVM), built on Databricks Free Edition with dbt and GitHub Actions. The end goal is to answer how the Selic rate has tracked inflation since the 90s with a tested pipeline.
 
 This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is part of what it shows.
 
@@ -64,7 +64,7 @@ Solid: the M1 path, in progress. Dashed: planned for later milestones.
 
 All decisions are in [`docs/adr/`](docs/adr/).
 
-## Design highlights
+## Design decisions
 
 These are the choices that shape the pipeline. Most of it is still being built, so they describe the design, not shipped features.
 
