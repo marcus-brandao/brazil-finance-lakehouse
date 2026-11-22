@@ -156,6 +156,82 @@ def test_window_over_the_cap_raises():
     assert e.value.status == 406
 
 
+FULL_2026 = ("01/01/2026", "31/12/2026")
+FIRST_HALF = ("01/01/2026", "30/06/2026")
+SECOND_HALF = ("01/07/2026", "31/12/2026")
+NOT_MODIFIED = (304, None)
+
+
+def range_api(answers: dict[tuple[str, str], tuple[int, object]]):
+    """Handler answering (status, json) per date pair; None is an empty body."""
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        key = (request.url.params["dataInicial"], request.url.params["dataFinal"])
+        status, body = answers[key]
+        if body is None:
+            return httpx.Response(status)
+        return httpx.Response(status, json=body)
+
+    handler.requests = requests
+    return handler
+
+
+def test_304_on_a_full_year_is_fetched_as_two_halves(tmp_path):
+    # What BCB answered for series 432 and the 2026 window on 2026-11-22.
+    first, second = [row("01/01/2026", "15.00")], [row("01/07/2026", "15.00")]
+    h = range_api(
+        {FULL_2026: NOT_MODIFIED, FIRST_HALF: (200, first), SECOND_HALF: (200, second)}
+    )
+    with make_client(h) as c:
+        backfill(
+            c,
+            [{"code": 432, "lookback_days": 10}],
+            date(2026, 1, 1),
+            date(2026, 12, 31),
+            tmp_path,
+            "run-1",
+            NOW,
+        )
+    sent = [
+        (r.url.params["dataInicial"], r.url.params["dataFinal"]) for r in h.requests
+    ]
+    assert sent == [FULL_2026, FIRST_HALF, SECOND_HALF]
+    envelope = saved(tmp_path, 432, 2026)
+    assert envelope["window_start"] == "2026-01-01"
+    assert envelope["window_end"] == "2026-12-31"
+    assert envelope["payload"] == first + second
+    assert read_state(tmp_path) == {"432": "2026-07-01"}
+
+
+def test_304_on_a_half_year_raises(tmp_path):
+    h = range_api({FULL_2026: NOT_MODIFIED, FIRST_HALF: NOT_MODIFIED})
+    with make_client(h) as c, pytest.raises(HttpError) as e:
+        backfill(
+            c, [DAILY], date(2026, 1, 1), date(2026, 12, 31), tmp_path, "run-1", NOW
+        )
+    assert e.value.status == 304
+    assert landing_files(tmp_path) == []
+
+
+def test_304_with_one_empty_half_keeps_the_other_half():
+    second = [row("01/07/2026")]
+    h = range_api(
+        {FULL_2026: NOT_MODIFIED, FIRST_HALF: (404, EMPTY), SECOND_HALF: (200, second)}
+    )
+    with make_client(h) as c:
+        assert fetch_window(c, 11, date(2026, 1, 1), date(2026, 12, 31)) == second
+
+
+def test_304_with_both_halves_empty_is_no_data():
+    h = range_api(
+        {FULL_2026: NOT_MODIFIED, FIRST_HALF: (404, EMPTY), SECOND_HALF: (404, EMPTY)}
+    )
+    with make_client(h) as c:
+        assert fetch_window(c, 11, date(2026, 1, 1), date(2026, 12, 31)) is None
+
+
 def test_backfill_writes_one_wrapped_file_per_series_and_year(tmp_path):
     payload_2024 = [row("02/01/2024", "0.043739"), row("29/02/2024", "0.041957")]
     payload_2025 = [row("02/01/2025", "0.045513")]

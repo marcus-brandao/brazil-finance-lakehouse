@@ -1,4 +1,4 @@
-# 0002. SGS connector: calendar-year windows, per-series watermark, 404 handling
+# 0002. SGS connector: calendar-year windows, per-series watermark, 404 and 304 handling
 
 - Status: accepted
 - Date: 2026-11-22
@@ -13,6 +13,7 @@ The BACEN SGS API returns JSON for a date range. Checked against https://api.bcb
 - `http://` answers 307 to `https://` with an empty body.
 - Series 432 (Selic target) has a row for every calendar day, weekends included, and already has rows for dates after today.
 - Values are strings (`"valor": "0.050788"`). Typing happens in silver.
+- On 2026-11-22 the JSON request for all of 2026 returned 304 with an empty body for series 432 and 1, although the request had no conditional headers (#32). Series 11, 12 and 433 returned 200 for the same window, and 432 and 1 returned 200 for 2024 and 2025. Moving either date by one day, or asking for each half of the year, returned 200. Reordering the parameters, encoding the slashes, adding a cache-busting parameter, changing User-Agent or Accept, and sending `Cache-Control: no-cache` or a non-matching `If-None-Match` still got 304, so a cache keyed on the URL does not explain it. The 304 has the same weak ETag as the 200 body for the same rows, `cache-control: public, max-age=900` and no Last-Modified. The BCB docs say nothing about 304, ETag or caching. The cause is unknown.
 
 Landing files have to be deterministic, because a re-run must overwrite the same file (issue #1).
 
@@ -23,6 +24,7 @@ Landing files have to be deterministic, because a re-run must overwrite the same
 - `incremental` starts at the watermark minus `lookback_days` (set per series in `ingestion/config/sgs.toml`) and runs through today. It refetches whole years, so a partial window never overwrites a full year file. A series with no watermark fails with a message to run `backfill` first.
 - A 404 whose body contains "Value(s) not found" means no data in the window: no file is written and the run continues. Any other 404 (unknown series) and any other `HttpError` raises. The connector reads `HttpError.body` to decide.
 - `HttpClient` treats any status of 300 or more as an error and does not follow redirects, so a 3xx raises instead of returning an empty body as data.
+- A 304 on a year window is retried once as two requests, January 1 to June 30 and July 1 to December 31, and the two row lists are joined in date order. The file, its `window_start` and `window_end`, the path and the watermark are the same as for a single request. A half that answers "Value(s) not found" counts as empty. A 304 or any other error on a half raises, so a 304 never turns into an empty window.
 - The connector writes to a local directory (`out/` by default) laid out as the landing Volume. The uploader (#12) moves it to the Volume and reads and writes the state file there.
 - Config is TOML, read with the standard library `tomllib`. No new dependency.
 
@@ -32,3 +34,4 @@ Landing files have to be deterministic, because a re-run must overwrite the same
 - Each run rewrites a few whole-year files, which is little data. A year file can change after it was first written (revised values), so bronze keeps duplicates and silver keeps the row with the latest `ingested_at` per series and date.
 - The lookback is in days for every series. Series 433 is monthly and uses 95 days, about three months, which covers its revisions without month arithmetic.
 - Pull the state file before any run that writes state, backfills included. A backfill on an empty disk writes a state file with only its own series, and the upload would replace the full state on the Volume.
+- When the 304 fallback runs, `payload` is the rows of two API responses joined in date order. For 432 and 1 in 2026 they equal the full-year rows (compared with the 200 answer for the same year without `formato`). If BCB starts answering 304 to half years as well, the run fails and needs another look.

@@ -34,13 +34,13 @@ def window_path(code: int, window_start: date) -> Path:
     return Path(f"sgs/series_code={code}/year={window_start.year}.json")
 
 
-def fetch_window(
-    client: HttpClient, code: int, window_start: date, window_end: date
+def fetch_range(
+    client: HttpClient, code: int, start: date, end: date
 ) -> list[dict] | None:
     params = {
         "formato": "json",
-        "dataInicial": window_start.strftime("%d/%m/%Y"),
-        "dataFinal": window_end.strftime("%d/%m/%Y"),
+        "dataInicial": start.strftime("%d/%m/%Y"),
+        "dataFinal": end.strftime("%d/%m/%Y"),
     }
     try:
         return client.get(URL.format(code=code), params=params).json()
@@ -50,6 +50,24 @@ def fetch_window(
         if e.status == 404 and "Value(s) not found" in e.body:
             return None
         raise
+
+
+def fetch_window(
+    client: HttpClient, code: int, window_start: date, window_end: date
+) -> list[dict] | None:
+    try:
+        return fetch_range(client, code, window_start, window_end)
+    except HttpError as e:
+        if e.status != 304:
+            raise
+    # BCB answers some full-year requests with a 304 and no body, although we
+    # send no conditional headers (432 and 1 for 2026). The two half years
+    # answer 200. A 304 on a half raises. See ADR-0002.
+    mid_year = date(window_start.year, 6, 30)
+    first = fetch_range(client, code, window_start, mid_year)
+    second = fetch_range(client, code, mid_year + timedelta(days=1), window_end)
+    rows = (first or []) + (second or [])
+    return rows or None
 
 
 def write_window(
