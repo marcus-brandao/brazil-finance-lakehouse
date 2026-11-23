@@ -12,30 +12,16 @@ This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is par
 
 ## What works today
 
-Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`), a script that sets up the Databricks workspace (see [docs/setup.md](docs/setup.md)), a shared HTTP client in `ingestion/http.py`, a BACEN SGS connector in `ingestion/sgs.py` and an uploader in `ingestion/upload.py`, a bronze job in `databricks/bronze_sgs.py` and a daily GitHub Actions workflow that runs all of it.
+BACEN SGS series 432 (Selic target), 11 (daily Selic), 12 (CDI) and 433 (IPCA) land in `bronze.sgs_raw` every day, with history back to 1995.
 
-The HTTP client retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After`, fails fast on other 4xx and on redirects, spaces out calls and logs one JSON line per attempt.
+- `ingestion/sgs.py` fetches each series in calendar-year windows and writes one file per series and year, with the raw payload inside a wrapper that records the window, `ingested_at` and `run_id`. Re-running a window overwrites the same file. `incremental` starts from a per-series watermark minus a lookback, so revised values are picked up ([ADR-0002](docs/adr/0002-sgs-windows-and-watermark.md)).
+- `ingestion/http.py` retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After` and fails fast on other 4xx.
+- `ingestion/upload.py` moves the files and the watermark state to the landing Volume with the Databricks Files API.
+- `databricks/bronze_sgs.py` reads the landing files with Auto Loader. A rewritten file comes back as a new row, and silver will keep the newest one ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)).
+- `.github/workflows/ingest.yml` runs all of it at 09:17 UTC and can backfill a single series from the Actions tab ([ADR-0004](docs/adr/0004-ingest-workflow.md)).
+- CI runs `make lint` and `make test` on every pull request and push to `main`. Tests mock HTTP, so CI needs no secrets, and the run fails if coverage drops below 90%.
 
-The SGS connector fetches series 432, 11, 12 and 433 (listed in `ingestion/config/sgs.toml`) into `out/`, one file per series and calendar year at `sgs/series_code=<code>/year=<yyyy>.json`, with the raw payload inside a wrapper that records the window, `ingested_at` and `run_id`. Re-running a window overwrites the same file. `backfill` takes a range and `incremental` starts from the stored watermark minus a per-series lookback, so revised values are picked up. See [ADR-0002](docs/adr/0002-sgs-windows-and-watermark.md).
-
-```
-uv run python -m ingestion.sgs backfill --from 2000-01-01
-uv run python -m ingestion.sgs incremental
-```
-
-The uploader moves `out/` to the landing Volume with the Databricks Files API. `pull` downloads `_state/sgs.json` first, so a run that starts on an empty disk can run `incremental`. `push` overwrites each file at the same relative path and uploads the state file last. `--dry-run` lists what it would upload and needs no credentials. It reads `DATABRICKS_HOST`, `DATABRICKS_TOKEN` and `DATABRICKS_CATALOG` from the environment.
-
-```
-uv run python -m ingestion.upload pull
-uv run python -m ingestion.sgs incremental
-uv run python -m ingestion.upload push
-```
-
-Every pull request and every push to `main` runs `make lint` and `make test` on GitHub Actions ([ci.yml](.github/workflows/ci.yml)). The run summary shows the coverage table. Tests mock HTTP, so CI needs no secrets and no access to BCB or Databricks. One test runs the SGS CLI end to end (backfill, then incremental) against a mocked API.
-
-`databricks/bronze_sgs.py` reads the landing files with Auto Loader into `bronze.sgs_raw`. A file rewritten at the same path is read again and appended as a new row, with the file path and modification time kept as columns ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)). `databricks/create_bronze_job.py` creates the serverless job. How to deploy it, a reconciliation query and the manual checks are in [docs/bronze.md](docs/bronze.md). It has been run by hand in a Free Edition workspace and its output reconciled with the files (see the Verified section there). CI does not run it.
-
-`.github/workflows/ingest.yml` runs every day at 09:17 UTC: it pulls the state file, fetches the four series, pushes the files and the state to the Volume, runs the `bronze_sgs` job and waits for it. A manual run takes a mode, a date range and one series code, so a single series can be backfilled from the Actions tab. The link to the Databricks job run is in the step summary. The job has to be created first with `databricks/create_bronze_job.py`. See [docs/ingest.md](docs/ingest.md) and [ADR-0004](docs/adr/0004-ingest-workflow.md). The workflow has not been run on GitHub yet, so the Verified section there is empty.
+The bronze job and the workflow were checked by hand against a Free Edition workspace. The results are in the Verified sections of [docs/bronze.md](docs/bronze.md) and [docs/ingest.md](docs/ingest.md).
 
 ## Architecture
 
@@ -74,14 +60,14 @@ flowchart LR
     class cvm,bi planned
 ```
 
-Solid: the M1 path, in progress. Dashed: planned for later milestones.
+Solid: built in M1. Dashed: planned for later milestones.
 
 ## Stack
 
 | Layer | Tool | Why | Status |
 |---|---|---|---|
-| Ingestion | Python 3.12, `uv`, GitHub Actions | [ADR-0001](docs/adr/0001-platform.md): Free Edition egress is restricted | 🚧 in progress · M1 |
-| Platform | Databricks Free Edition: Unity Catalog, Delta, Auto Loader | [ADR-0001](docs/adr/0001-platform.md) | 🚧 in progress · M1 |
+| Ingestion | Python 3.12, `uv`, GitHub Actions | [ADR-0001](docs/adr/0001-platform.md): Free Edition egress is restricted | ✅ built · M1 |
+| Platform | Databricks Free Edition: Unity Catalog, Delta, Auto Loader | [ADR-0001](docs/adr/0001-platform.md) | ✅ built · M1 |
 | Transform | dbt | [ADR-0001](docs/adr/0001-platform.md) | ⬜ planned · M2 |
 | BI | Evidence, Databricks AI/BI dashboards | [ADR-0001](docs/adr/0001-platform.md) | ⬜ planned · M3 |
 | Quality | ruff, pytest, pytest-cov, pre-commit, GitHub Actions CI | Standard Python tooling, no ADR | ✅ built |
@@ -90,12 +76,12 @@ All decisions are in [`docs/adr/`](docs/adr/).
 
 ## Design decisions
 
-These are the choices that shape the pipeline. Most of it is still being built, so they describe the design, not shipped features.
+These are the choices that shape the pipeline. Silver, gold and the dbt and bundle parts arrive in later milestones.
 
-- Ingestion runs outside Databricks. Free Edition only allows egress to a short list of trusted domains, so connectors will run on GitHub Actions and push raw files into a Unity Catalog Volume. Databricks takes over from there. ([ADR-0001](docs/adr/0001-platform.md))
-- Connectors are idempotent and windowed. The same date window will always write to the same path, so a rerun overwrites instead of duplicating. BACEN SGS caps date-range queries at 10 years, so backfills will go in windows of at most 5 years.
-- Bronze is append-only, with the raw payload untouched. Auto Loader will keep it in an envelope. Dedup and typing will happen in silver, so a bug downstream can be fixed by replaying from bronze.
-- The Databricks workspace can be thrown away. Free Edition can shut compute down over quota or delete inactive accounts, so code, dbt models, dashboards and bundle config all live in git and can be redeployed into a fresh workspace.
+- Ingestion runs outside Databricks. Free Edition only allows egress to a short list of trusted domains, so the connectors run on GitHub Actions and push raw files into a Unity Catalog Volume. Databricks takes over from there ([ADR-0001](docs/adr/0001-platform.md)).
+- Connectors are idempotent and windowed. A date window always writes to the same path, so a rerun overwrites instead of duplicating. SGS refuses ranges over 10 years for daily series, and the connector asks for one calendar year at a time ([ADR-0002](docs/adr/0002-sgs-windows-and-watermark.md)).
+- Bronze is append-only and keeps the raw payload untouched in an envelope. Dedup and typing happen in silver, so a bug downstream can be fixed by replaying from bronze.
+- The Databricks workspace can be thrown away. Free Edition can shut compute down over quota or delete inactive accounts, so code, dbt models, dashboards and bundle config live in git and can be redeployed into a fresh workspace ([docs/setup.md](docs/setup.md#rebuilding)).
 - Every non-obvious choice gets an ADR. Every change starts from an issue with a "Done when" list and lands as a small PR merged with a merge commit.
 
 ## Roadmap
@@ -104,7 +90,7 @@ Tracked as [milestones](https://github.com/marcus-brandao/brazil-finance-lakehou
 
 | | Milestone | Focus |
 |---|---|---|
-| 🚧 | [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1) | Foundations, and BACEN SGS landing daily in bronze with full history |
+| ✅ | [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1) | Foundations, and BACEN SGS landing daily in bronze with full history |
 | ⬜ | [M2](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/2) | Silver and gold with dbt, plus more sources |
 | ⬜ | [M3](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/3) | BI and v1: Evidence site and AI/BI dashboards |
 | ⬜ | [M4](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/4) | PII and identity resolution, on synthetic seeded data |
@@ -114,15 +100,20 @@ Tracked as [milestones](https://github.com/marcus-brandao/brazil-finance-lakehou
 
 ## How to run
 
-There is no pipeline to run yet, only the dev setup. Requires [`uv`](https://docs.astral.sh/uv/).
+Requires [`uv`](https://docs.astral.sh/uv/) and a [Databricks Free Edition](https://docs.databricks.com/aws/en/getting-started/free-edition) workspace.
 
-```bash
-git clone https://github.com/marcus-brandao/brazil-finance-lakehouse.git
-cd brazil-finance-lakehouse
-uv sync
-uv run pre-commit install
-make lint test
-```
+1. Clone the repo, then run `uv sync`, `uv run pre-commit install` and `make lint test`.
+2. Set up the workspace, the `.env` file and the GitHub secrets with [docs/setup.md](docs/setup.md).
+3. Create the bronze job with `databricks/create_bronze_job.py` ([docs/bronze.md](docs/bronze.md#deploy)).
+4. In the Actions tab, run Ingest SGS with mode `backfill` and a start date. The daily schedule takes over from there ([docs/ingest.md](docs/ingest.md)).
+
+## Docs
+
+- [docs/setup.md](docs/setup.md): workspace, catalog, Volume and secrets
+- [docs/ingest.md](docs/ingest.md): the daily workflow, manual runs and its checks
+- [docs/bronze.md](docs/bronze.md): the bronze job, the reconciliation query and its checks
+- [docs/adr/](docs/adr/): architecture decision records
+- [docs/tech-debt.md](docs/tech-debt.md): known shortcuts
 
 ## Data sources
 

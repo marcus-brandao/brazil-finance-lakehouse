@@ -48,7 +48,7 @@ tests/
 - Bronze is append-only and keeps raw payloads untouched in an envelope; dedup and typing happen in silver.
 - Every non-obvious decision gets an ADR in `docs/adr/` (Context / Decision / Consequences), numbered `NNNN-title.md`.
 - Tests: mock HTTP, no network in unit tests. Cover edge cases (leap years, empty responses, window boundaries).
-- Data-source facts (API limits, series codes) must be verified against the official docs, not assumed. BACEN SGS date-range queries are capped at 10 years per request; the connector uses windows of at most 5 years.
+- Data-source facts (API limits, series codes) must be verified against the official docs, not assumed. BACEN SGS date-range queries for daily series are capped at 10 years per request; the connector uses calendar-year windows.
 
 ## Writing
 

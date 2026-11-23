@@ -81,3 +81,14 @@ Run by hand in a Free Edition workspace on 2026-11-22 and 2026-11-23 (UTC), with
 - After a second run with no file changed, each file had been read once.
 - Series 432 was uploaded again with `ingestion.upload push`. The next run added one row for `series_code=432/year=2025.json` with a later `source_file_modification_time`, and left the other three files alone. The table then had 5 rows.
 - `DESCRIBE TABLE EXTENDED bronze.sgs_raw` showed the table comment and a comment on all 10 columns.
+
+Full history, checked on 2026-11-23 after run 45113207172 of the ingest workflow backfilled from 1995-01-01. The reconciliation query matched for all 124 files, and `bronze.sgs_raw` had 138 rows (the earlier test runs account for the rest).
+
+| Series | Files | First year | Records |
+|---|---|---|---|
+| 11 | 32 | 1995 | 8003 |
+| 12 | 32 | 1995 | 8003 |
+| 432 | 28 | 1999 | 10142 |
+| 433 | 32 | 1995 | 382 |
+
+SGS returned "Value(s) not found" for series 432 from 1995 to 1998, so those windows wrote no file.
