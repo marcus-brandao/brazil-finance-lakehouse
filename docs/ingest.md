@@ -30,7 +30,7 @@ uv run python databricks/run_bronze_job.py
 
 ## Setup
 
-- Secrets `DATABRICKS_HOST` and `DATABRICKS_TOKEN` (setup.md, step 5).
+- Secret `DATABRICKS_TOKEN` and repository variable `DATABRICKS_HOST` (setup.md, step 5).
 - Optional repository variable `DATABRICKS_CATALOG`. Without it the workflow uses `workspace`.
 - The job `bronze_sgs` has to exist. Run `databricks/create_bronze_job.py` once (see [bronze.md](bronze.md)). The workflow fails with a message if it is missing.
 

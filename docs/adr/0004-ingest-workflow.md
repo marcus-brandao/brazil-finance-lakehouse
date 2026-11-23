@@ -18,7 +18,7 @@
 - One concurrency group, `ingest-sgs`, with `cancel-in-progress: false`. Runs queue and never overlap. GitHub keeps one pending run per group, so a newer pending run replaces an older one that has not started.
 - The workflow does not create the bronze job. `databricks/run_bronze_job.py` looks it up by name and exits with a message pointing at `create_bronze_job.py` if it is missing. Creating it is a deploy step (it uploads the script and sets the catalog), and doing that on every scheduled run would hide a missing or edited job.
 - The run URL is written to the step summary right after the run starts, before the wait. A run that is not `SUCCESS` (failed, timed out after 30 minutes, skipped) exits non-zero.
-- `DATABRICKS_CATALOG` comes from a repository variable, with `workspace` as the fallback. Host and token are secrets, set only on the ingest job. `ci.yml` has no Databricks credentials.
+- `DATABRICKS_CATALOG` comes from a repository variable, with `workspace` as the fallback. `DATABRICKS_HOST` is a repository variable too: GitHub masks the value of a secret in the step summary, which turned the job run link into `***/?o=...` in the first run on 2026-11-23. Only `DATABRICKS_TOKEN` is a secret. Both are set on the ingest job only, and `ci.yml` has no Databricks credentials.
 - The dispatch inputs reach the shell as environment variables and go into a bash array. The connector's argument parser validates them before any request or upload.
 
 ## Consequences
