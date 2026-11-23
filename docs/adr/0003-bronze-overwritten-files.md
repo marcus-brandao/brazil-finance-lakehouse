@@ -31,4 +31,4 @@ Bronze is append-only and keeps the raw payload untouched. Dedup and typing happ
 - Each rewrite adds a copy of the whole year, so `sgs_raw` grows with every incremental run. The data is small. If it stops being small, a retention step can drop old rows per file.
 - Silver has to dedup. A reconciliation compares the records in a file with the newest bronze row for it ([bronze.md](../bronze.md)).
 - If Auto Loader sees a file twice with the same modification time, the table gets two identical rows. Silver dedup handles that too.
-- Not confirmed yet: that an overwrite through the Files API changes the modification time Auto Loader sees, and that Auto Loader runs on Free Edition serverless with a checkpoint in a Volume. The manual run in [bronze.md](../bronze.md) checks both. If the modification time does not change, this decision does not work and needs another look.
+- Confirmed by a manual run on 2026-11-22 (see [bronze.md](../bronze.md)): Auto Loader runs on Free Edition serverless with the checkpoint in a Volume, and a file overwritten through the Files API gets a new modification time, so it is read again and appended once.

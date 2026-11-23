@@ -47,5 +47,5 @@ Ingestion runs outside Databricks because of the egress restriction. GitHub Acti
 - Streaming (M5) is limited to what serverless and one pipeline per type allow. Revisit this ADR then.
 - Confirmed in a live workspace (2026-11-22): personal access tokens work, and the Databricks SDK can create schemas and Volumes through the REST API. The API cannot create a catalog ("Metastore storage root URL does not exist"), so the project uses the default `workspace` catalog.
 - File uploads to a Volume work: the Files API accepted overwrites with a personal access token, and a second upload of the same files left the same five paths (checked 2026-11-22 from a laptop, not yet from Actions, which #14 covers).
-- Auto Loader on serverless: the docs allow only `availableNow` and `once` triggers ([ADR-0003](0003-bronze-overwritten-files.md)). The bronze job has not been run in a workspace yet.
+- Auto Loader on serverless works with `availableNow` and a checkpoint in a Volume (confirmed 2026-11-22, see [ADR-0003](0003-bronze-overwritten-files.md)). A job created through the API needs a serverless environment version set.
 - Not yet confirmed: Databricks Asset Bundles, and dbt against the Free Edition warehouse. The first M1 stories check these. If any is missing, this ADR gets updated.
