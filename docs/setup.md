@@ -49,7 +49,7 @@ uv run --group dbt dbt debug --project-dir dbt --profiles-dir dbt
 make dbt-build
 ```
 
-`dbt debug` ends with "All checks passed!". `make dbt-build` checks that `bronze.sgs_raw` was loaded in the last 48 hours, then runs the dbt tests. Run it after the first ingest, or the freshness check fails on an empty table.
+`dbt debug` ends with "All checks passed!". `make dbt-build` checks that `bronze.sgs_raw` and `bronze.ptax_raw` were loaded in the last 48 hours, then runs the dbt tests. Run it after the first ingest, or the freshness check fails on an empty table.
 
 ## Rebuilding
 

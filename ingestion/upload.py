@@ -6,12 +6,13 @@ from pathlib import Path
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.errors import NotFound
 
-from ingestion.sgs import STATE_FILE
+from ingestion import ptax, sgs
 
 log = logging.getLogger("ingestion.upload")
 
 # Same Volume that databricks/setup_workspace.py creates (bronze.landing).
 VOLUME = "/Volumes/{catalog}/bronze/landing"
+STATE_FILES = [sgs.STATE_FILE, ptax.STATE_FILE]
 
 
 def volume_root() -> str:
@@ -19,23 +20,24 @@ def volume_root() -> str:
 
 
 def pull_state(w: WorkspaceClient, out: Path) -> None:
-    # A first run has no state file on the Volume yet. incremental then fails
+    # A first run has no state files on the Volume yet. incremental then fails
     # with its own "run backfill first" message.
-    try:
-        response = w.files.download(f"{volume_root()}/{STATE_FILE}")
-    except NotFound:
-        log.info("no state file on the Volume yet")
-        return
-    path = out / STATE_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(response.contents.read())
+    for state_file in STATE_FILES:
+        try:
+            response = w.files.download(f"{volume_root()}/{state_file}")
+        except NotFound:
+            log.info(f"no {state_file} on the Volume yet")
+            continue
+        path = out / state_file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(response.contents.read())
 
 
 def push(w: WorkspaceClient | None, out: Path) -> None:
-    # The state file goes last, so a failed upload never moves the watermark
+    # The state files go last, so a failed upload never moves a watermark
     # past data that did not land. Errors are not caught.
     files = sorted(p for p in out.rglob("*") if p.is_file())
-    files.sort(key=lambda p: p.relative_to(out).as_posix() == STATE_FILE)
+    files.sort(key=lambda p: p.relative_to(out).as_posix() in STATE_FILES)
     for path in files:
         target = f"{volume_root()}/{path.relative_to(out).as_posix()}"
         if w is None:

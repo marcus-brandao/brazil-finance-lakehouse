@@ -1,9 +1,10 @@
-# Uploads bronze_sgs.py to the workspace and creates the job, or updates it if
-# it already exists. Safe to rerun. Does not start a run.
+# Uploads bronze.py to the workspace and creates the job, or updates it if it
+# already exists. The job has one task per source. Safe to rerun. Does not start a run.
 
 import os
 from pathlib import Path
 
+from bronze import SOURCES
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.compute import Environment
 from databricks.sdk.service.jobs import (
@@ -14,8 +15,8 @@ from databricks.sdk.service.jobs import (
 )
 from databricks.sdk.service.workspace import ImportFormat
 
-JOB_NAME = "bronze_sgs"
-SCRIPT = Path(__file__).parent / "bronze_sgs.py"
+JOB_NAME = "bronze"
+SCRIPT = Path(__file__).parent / "bronze.py"
 FALLBACK_CATALOG = "workspace"
 ENVIRONMENT_KEY = "default"
 
@@ -26,16 +27,21 @@ def job_settings(script_path: str, catalog: str) -> JobSettings:
     environment = JobEnvironment(
         environment_key=ENVIRONMENT_KEY, spec=Environment(environment_version="6")
     )
-    task = Task(
-        task_key="bronze_sgs",
-        environment_key=ENVIRONMENT_KEY,
-        spark_python_task=SparkPythonTask(
-            python_file=script_path, parameters=["--catalog", catalog]
-        ),
-    )
+    # No dependencies between tasks, so one failing source does not stop the other.
+    tasks = [
+        Task(
+            task_key=f"bronze_{source}",
+            environment_key=ENVIRONMENT_KEY,
+            spark_python_task=SparkPythonTask(
+                python_file=script_path,
+                parameters=["--catalog", catalog, "--source", source],
+            ),
+        )
+        for source in SOURCES
+    ]
     return JobSettings(
         name=JOB_NAME,
-        tasks=[task],
+        tasks=tasks,
         environments=[environment],
         max_concurrent_runs=1,
     )
@@ -44,7 +50,7 @@ def job_settings(script_path: str, catalog: str) -> JobSettings:
 def deploy(w: WorkspaceClient, catalog: str) -> int:
     folder = f"/Users/{w.current_user.me().user_name}/brazil-finance-lakehouse"
     w.workspace.mkdirs(folder)
-    script_path = f"{folder}/bronze_sgs.py"
+    script_path = f"{folder}/bronze.py"
     # AUTO keeps a plain .py as a workspace file, SOURCE would turn it into a notebook.
     w.workspace.upload(
         script_path, SCRIPT.read_bytes(), format=ImportFormat.AUTO, overwrite=True

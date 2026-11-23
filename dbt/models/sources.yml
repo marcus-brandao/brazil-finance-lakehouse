@@ -17,3 +17,17 @@ sources:
             data_tests: [not_null]
           - name: payload
             data_tests: [not_null]
+      - name: ptax_raw
+        config:
+          # Same as sgs_raw: the envelope fields are strings. Ingest rewrites the
+          # current-year file every day, weekends included, so the check does not
+          # trip on non-business days.
+          loaded_at_field: source_file_modification_time
+          freshness:
+            warn_after: {count: 26, period: hour}
+            error_after: {count: 48, period: hour}
+        columns:
+          - name: window_start
+            data_tests: [not_null]
+          - name: payload
+            data_tests: [not_null]

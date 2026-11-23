@@ -1,6 +1,6 @@
 # 0004. Ingest workflow: queued runs, a job that must already exist
 
-- Status: accepted
+- Status: accepted, updated 2026-11-23 for PTAX (see the end)
 - Date: 2026-11-22
 
 ## Context
@@ -27,3 +27,10 @@
 - If the workflow is cancelled by hand, check the Databricks run and the Volume before running again. Files without a bronze run are picked up by the next successful run, because Auto Loader reads what is new.
 - The first run on a new workspace fails with "job bronze_sgs not found" until `create_bronze_job.py` has been run.
 - Scheduled workflows in a public repo are turned off after 60 days without repository activity (GitHub docs). Any commit or a manual run restarts them.
+
+## Update: PTAX joins the workflow (#42)
+
+- The PTAX connector runs in the same workflow, which is now named `Ingest`. The concurrency group is `ingest` instead of `ingest-sgs`. A second workflow would need its own group, and two runs pushing state files at the same time is what the one group rules out. A scheduled run fetches SGS, then PTAX, then pushes everything once and runs the bronze job once.
+- A `source` input (`all`, `sgs`, `ptax`) picks what a manual run fetches. `series` applies to SGS only. A backfill with `source=all` sends the same `from` and `to` to both connectors, so a PTAX history backfill is run with `source=ptax` and `from=1984-01-01`.
+- The bronze job is named `bronze`, with one task per source, so the message for a missing job is now "job bronze not found".
+- PTAX rows are stamped around 13:00, earlier than the SGS releases, so the 09:17 UTC run has the previous business day's values for both.

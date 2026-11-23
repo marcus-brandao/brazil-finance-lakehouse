@@ -66,9 +66,13 @@ def test_state_round_trip(tmp_path):
     w.files.upload.side_effect = lambda path, f, overwrite: volume.update(
         {path: f.read()}
     )
-    w.files.download.side_effect = lambda path: MagicMock(
-        contents=io.BytesIO(volume[path])
-    )
+
+    def download(path):
+        if path not in volume:
+            raise NotFound("missing")
+        return MagicMock(contents=io.BytesIO(volume[path]))
+
+    w.files.download.side_effect = download
     upload.push(w, out)
 
     fresh = tmp_path / "fresh"
@@ -88,3 +92,29 @@ def test_upload_error_is_raised(tmp_path):
     w.files.upload.side_effect = PermissionDenied("no")
     with pytest.raises(PermissionDenied):
         upload.push(w, make_out(tmp_path))
+
+
+def test_both_state_files_are_uploaded_after_all_data(tmp_path):
+    out = make_out(tmp_path)
+    (out / "ptax").mkdir()
+    (out / "ptax/year=2025.json").write_text("{}")
+    (out / "_state/ptax.json").write_text('{"usd": "2025-12-31"}')
+    w = MagicMock()
+    upload.push(w, out)
+    targets = [c.args[0] for c in w.files.upload.call_args_list]
+    assert all("_state/" not in t for t in targets[:2])
+    assert sorted(t.rsplit("/", 1)[1] for t in targets[2:]) == ["ptax.json", "sgs.json"]
+
+
+def test_pull_reads_both_state_files_and_survives_one_missing(tmp_path):
+    w = MagicMock()
+
+    def download(path):
+        if path.endswith("ptax.json"):
+            raise NotFound("missing")
+        return MagicMock(contents=io.BytesIO(b'{"432": "2025-06-30"}'))
+
+    w.files.download.side_effect = download
+    upload.pull_state(w, tmp_path)
+    assert (tmp_path / "_state/sgs.json").exists()
+    assert not (tmp_path / "_state/ptax.json").exists()
