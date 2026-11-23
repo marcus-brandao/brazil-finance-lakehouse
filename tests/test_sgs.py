@@ -6,17 +6,18 @@ import pytest
 
 from ingestion.http import HttpClient, HttpError
 from ingestion.sgs import (
+    STATE_FILE,
     backfill,
     fetch_window,
     incremental,
     load_series,
     main,
     parse_date,
-    read_state,
     select_series,
     window_path,
     year_windows,
 )
+from ingestion.state import read_state
 
 NOW = datetime(2026, 11, 22, 12, 0, tzinfo=UTC)
 EMPTY = {
@@ -203,7 +204,7 @@ def test_304_on_a_full_year_is_fetched_as_two_halves(tmp_path):
     assert envelope["window_start"] == "2026-01-01"
     assert envelope["window_end"] == "2026-12-31"
     assert envelope["payload"] == first + second
-    assert read_state(tmp_path) == {"432": "2026-07-01"}
+    assert read_state(tmp_path, STATE_FILE) == {"432": "2026-07-01"}
 
 
 def test_304_on_a_half_year_raises(tmp_path):
@@ -257,7 +258,7 @@ def test_backfill_writes_one_wrapped_file_per_series_and_year(tmp_path):
         "payload": payload_2024,
     }
     assert saved(tmp_path, 11, 2025)["payload"] == payload_2025
-    assert read_state(tmp_path) == {"11": "2025-01-02"}
+    assert read_state(tmp_path, STATE_FILE) == {"11": "2025-01-02"}
 
 
 def test_backfill_skips_empty_years_without_failing(tmp_path):
@@ -311,11 +312,11 @@ def test_watermark_ignores_rows_after_today_and_never_moves_back(tmp_path):
         backfill(
             c, [DAILY], date(2026, 1, 1), date(2026, 12, 31), tmp_path, "run-1", NOW
         )
-        assert read_state(tmp_path) == {"11": "2026-11-20"}
+        assert read_state(tmp_path, STATE_FILE) == {"11": "2026-11-20"}
         backfill(
             c, [DAILY], date(2020, 1, 1), date(2020, 12, 31), tmp_path, "run-2", NOW
         )
-    assert read_state(tmp_path) == {"11": "2026-11-20"}
+    assert read_state(tmp_path, STATE_FILE) == {"11": "2026-11-20"}
 
 
 def test_incremental_starts_at_watermark_minus_lookback(tmp_path):
@@ -393,10 +394,14 @@ def test_cli_backfill_then_incremental_against_mocked_http(tmp_path, monkeypatch
         assert envelope["source"] == "bcb_sgs"
         assert envelope["series_code"] == code
         assert envelope["payload"] == [row("02/12/2024")]
-    assert read_state(tmp_path) == {str(code): "2024-12-02" for code in codes}
+    assert read_state(tmp_path, STATE_FILE) == {
+        str(code): "2024-12-02" for code in codes
+    }
 
     main([*out, "incremental"])
-    assert read_state(tmp_path) == {str(code): "2024-12-02" for code in codes}
+    assert read_state(tmp_path, STATE_FILE) == {
+        str(code): "2024-12-02" for code in codes
+    }
 
 
 def test_select_series_keeps_one_or_all():
@@ -428,6 +433,6 @@ def test_cli_single_series_backfill_keeps_the_other_watermarks(tmp_path, monkeyp
         ["--out", str(tmp_path), "--series", "433", "backfill", "--from", "2024-01-01"]
     )
 
-    assert read_state(tmp_path) == {"11": "2025-01-02", "433": "2024-12-01"}
+    assert read_state(tmp_path, STATE_FILE) == {"11": "2025-01-02", "433": "2024-12-01"}
     assert (tmp_path / "sgs/series_code=433/year=2024.json").exists()
     assert not (tmp_path / "sgs/series_code=11").exists()

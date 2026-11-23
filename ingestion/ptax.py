@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from ingestion.http import HttpClient
 from ingestion.sgs import year_windows
+from ingestion.state import read_state, write_state
 
 # Closing PTAX for USD, one row per business day. Always https: http:// gives a 404 page.
 URL = (
@@ -65,16 +66,11 @@ def write_window(
 
 
 def read_watermark(out: Path) -> str | None:
-    path = out / STATE_FILE
-    if not path.exists():
-        return None
-    return json.loads(path.read_text()).get(STATE_KEY)
+    return read_state(out, STATE_FILE).get(STATE_KEY)
 
 
 def write_watermark(out: Path, watermark: str) -> None:
-    path = out / STATE_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({STATE_KEY: watermark}, indent=2))
+    write_state(out, STATE_FILE, {STATE_KEY: watermark})
 
 
 def sync(

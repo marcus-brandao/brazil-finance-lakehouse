@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from ingestion.http import HttpClient, HttpError
+from ingestion.state import read_state, write_state
 
 # Always https: the http:// URL answers 307 with an empty body.
 URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{code}/dados"
@@ -92,19 +93,6 @@ def write_window(
     path.write_text(json.dumps(envelope))
 
 
-def read_state(out: Path) -> dict[str, str]:
-    path = out / STATE_FILE
-    if not path.exists():
-        return {}
-    return json.loads(path.read_text())
-
-
-def write_state(out: Path, state: dict[str, str]) -> None:
-    path = out / STATE_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, indent=2, sort_keys=True))
-
-
 def sync_series(
     client: HttpClient,
     series: dict,
@@ -127,9 +115,9 @@ def sync_series(
         seen += [d for row in payload if (d := parse_date(row["data"])) <= today]
 
     if seen:
-        state = read_state(out)
+        state = read_state(out, STATE_FILE)
         state[str(code)] = max(max(seen).isoformat(), state.get(str(code), ""))
-        write_state(out, state)
+        write_state(out, STATE_FILE, state)
 
 
 def backfill(
@@ -152,7 +140,7 @@ def incremental(
     run_id: str,
     now: datetime,
 ) -> None:
-    state = read_state(out)
+    state = read_state(out, STATE_FILE)
     for series in series_list:
         watermark = state.get(str(series["code"]))
         if watermark is None:
