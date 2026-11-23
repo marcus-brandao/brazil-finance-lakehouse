@@ -34,3 +34,9 @@
 - A `source` input (`all`, `sgs`, `ptax`) picks what a manual run fetches. `series` applies to SGS only. A backfill with `source=all` sends the same `from` and `to` to both connectors, so a PTAX history backfill is run with `source=ptax` and `from=1984-01-01`.
 - The bronze job is named `bronze`, with one task per source, so the message for a missing job is now "job bronze not found".
 - PTAX rows are stamped around 13:00, earlier than the SGS releases, so the 09:17 UTC run has the previous business day's values for both.
+
+## Update: CVM joins the workflow (#43)
+
+- The CVM fund report has a second cron in the same workflow, Sundays at 10:47 UTC. The steps compare `github.event.schedule` with each cron string, so the daily run fetches SGS and PTAX and the weekly run fetches CVM. Both use the `ingest` concurrency group, so they never push state files at the same time. See [ADR-0008](0008-cvm-inf-diario-landing.md).
+- `source` gains `cvm`. A backfill with `source=all` sends `from` and `to` to all three connectors, and CVM takes whole months from them.
+- If one of the two crons is changed, the strings in the `if:` of the fetch steps have to change with it.

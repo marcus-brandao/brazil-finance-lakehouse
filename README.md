@@ -12,15 +12,16 @@ This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is par
 
 ## What works today
 
-BACEN SGS series 432 (Selic target), 11 (daily Selic), 12 (CDI) and 433 (IPCA) land in `bronze.sgs_raw` every day, with history back to 1995. The USD/BRL closing PTAX lands in `bronze.ptax_raw` the same way, with history back to 1984.
+BACEN SGS series 432 (Selic target), 11 (daily Selic), 12 (CDI) and 433 (IPCA) land in `bronze.sgs_raw` every day, with history back to 1995. The USD/BRL closing PTAX lands in `bronze.ptax_raw` the same way, with history back to 1984. The CVM daily fund report lands in `bronze.cvm_inf_diario_raw` every week, with history back to 2023-01.
 
 - `ingestion/sgs.py` fetches each series in calendar-year windows and writes one file per series and year, with the raw payload inside a wrapper that records the window, `ingested_at` and `run_id`. Re-running a window overwrites the same file. `incremental` starts from a per-series watermark minus a lookback, so revised values are picked up ([ADR-0002](docs/adr/0002-sgs-windows-and-watermark.md)).
 - `ingestion/ptax.py` does the same for the PTAX rate from the BACEN Olinda API: one file per calendar year at `ptax/year=<yyyy>.json`, its own watermark in `_state/ptax.json`, a 10 day lookback ([ADR-0007](docs/adr/0007-ptax-windows-and-watermark.md)).
+- `ingestion/cvm.py` downloads the CVM monthly zip and lands the CSV inside as is at `cvm_inf_diario/month=<yyyy-mm>.csv`. Its watermark is the newest month in `_state/cvm.json`, and `incremental` refetches the month before it, which CVM still revises ([ADR-0008](docs/adr/0008-cvm-inf-diario-landing.md)).
 - `ingestion/http.py` retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After` and fails fast on other 4xx.
-- `ingestion/upload.py` moves the files and the watermark state files to the landing Volume with the Databricks Files API.
-- `databricks/bronze.py` reads the landing files of one source (`--source sgs` or `ptax`) with Auto Loader, and the `bronze` job runs one task per source. A rewritten file comes back as a new row, and silver keeps the newest one ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)).
-- `.github/workflows/ingest.yml` runs both connectors and the bronze job at 09:17 UTC and can backfill one source or one SGS series from the Actions tab ([ADR-0004](docs/adr/0004-ingest-workflow.md)).
-- `dbt/` declares `bronze.sgs_raw` and `bronze.ptax_raw` as sources with a freshness check and null tests. `make dbt-build` runs them against the Free Edition SQL warehouse ([ADR-0005](docs/adr/0005-where-dbt-runs.md)). `silver.sgs_series` is an incremental model with one row per series and date, typed and deduplicated: it keeps the newest bronze row of each landing file and replaces a file's rows when the file is rewritten ([ADR-0006](docs/adr/0006-silver-sgs-dedup.md)). Tests cover uniqueness, not-null, accepted series codes and a reconciliation against bronze.
+- `ingestion/upload.py` moves the files and the watermark state files to the landing Volume with the Databricks Files API. `ingestion/state.py` reads and writes those state files for all three connectors.
+- `databricks/bronze.py` reads the landing files of one source (`--source sgs`, `ptax` or `cvm_inf_diario`) with Auto Loader, and the `bronze` job runs one task per source. SGS and PTAX are read as JSON. The CVM CSV is read by header name into one string column per name across the three layouts CVM has used. A rewritten file comes back as a new row, and silver keeps the newest one ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)).
+- `.github/workflows/ingest.yml` runs the SGS and PTAX connectors and the bronze job at 09:17 UTC every day, runs CVM on Sundays at 10:47 UTC, and can backfill one source or one SGS series from the Actions tab ([ADR-0004](docs/adr/0004-ingest-workflow.md)).
+- `dbt/` declares `bronze.sgs_raw`, `bronze.ptax_raw` and `bronze.cvm_inf_diario_raw` as sources with a freshness check and null tests. `make dbt-build` runs them against the Free Edition SQL warehouse ([ADR-0005](docs/adr/0005-where-dbt-runs.md)). `silver.sgs_series` is an incremental model with one row per series and date, typed and deduplicated: it keeps the newest bronze row of each landing file and replaces a file's rows when the file is rewritten ([ADR-0006](docs/adr/0006-silver-sgs-dedup.md)). Tests cover uniqueness, not-null, accepted series codes and a reconciliation against bronze.
 - CI runs `make lint` and `make test` on every pull request and push to `main`. Tests mock HTTP, so CI needs no secrets, and the run fails if coverage drops below 90%.
 
 The bronze job and the workflow were checked by hand against a Free Edition workspace. The results are in the Verified sections of [docs/bronze.md](docs/bronze.md) and [docs/ingest.md](docs/ingest.md).
@@ -32,7 +33,7 @@ flowchart LR
     subgraph src[Open data]
         sgs[BACEN SGS]
         ptax[BACEN PTAX]
-        cvm["CVM<br/>(planned · M2)"]
+        cvm[CVM fund report]
     end
 
     subgraph gha[GitHub Actions]
@@ -50,7 +51,7 @@ flowchart LR
 
     sgs --> conn
     ptax --> conn
-    cvm -.-> conn
+    cvm --> conn
     conn --> vol --> bronze
     bronze -.-> silver -.-> gold -.-> bi
 
@@ -61,10 +62,10 @@ flowchart LR
     class bronze bronzeC
     class silver silverC
     class gold goldC
-    class cvm,bi planned
+    class bi planned
 ```
 
-Solid: built in M1. Dashed: planned for later milestones.
+Solid: built. Dashed: planned for later milestones.
 
 ## Stack
 
@@ -125,7 +126,7 @@ Data comes from open sources and is never committed to this repo.
 
 - [BACEN SGS](https://dadosabertos.bcb.gov.br/): Banco Central do Brasil time-series system
 - [BACEN PTAX](https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/aplicacao#!/recursos): USD/BRL closing rate, from the Olinda open data service
-- [CVM open data](https://dados.cvm.gov.br/): Comissão de Valores Mobiliários
+- [CVM open data](https://dados.cvm.gov.br/): Comissão de Valores Mobiliários, [daily fund report](https://dados.cvm.gov.br/dataset/fi-doc-inf_diario) (informe diario) from 2023-01
 
 All three are published under the Open Database License (ODbL); attribution is kept here.
 

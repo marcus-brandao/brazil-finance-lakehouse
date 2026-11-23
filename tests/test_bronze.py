@@ -8,6 +8,15 @@ import pytest
 from ingestion import ptax, sgs
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
+# The three CVM layouts, see docs/ingest.md.
+HEADER_A = (
+    "CNPJ_FUNDO;DT_COMPTC;VL_TOTAL;VL_QUOTA;VL_PATRIM_LIQ;CAPTC_DIA;RESG_DIA;NR_COTST"
+)
+HEADER_B = "TP_FUNDO;" + HEADER_A
+HEADER_C = (
+    "TP_FUNDO_CLASSE;CNPJ_FUNDO_CLASSE;ID_SUBCLASSE;DT_COMPTC;VL_TOTAL;VL_QUOTA;"
+    "VL_PATRIM_LIQ;CAPTC_DIA;RESG_DIA;NR_COTST"
+)
 WINDOW = (date(2025, 1, 1), date(2025, 12, 31))
 
 
@@ -27,7 +36,7 @@ def test_envelope_columns_match_what_the_connector_writes(tmp_path, source):
     assert names == list(written_envelope(tmp_path, source))
 
 
-@pytest.mark.parametrize("source", ["sgs", "ptax"])
+@pytest.mark.parametrize("source", ["sgs", "ptax", "cvm_inf_diario"])
 def test_every_column_has_a_comment(source):
     assert all(comment for _, _, comment in bronze.columns(source))
     sql = bronze.create_table_sql("workspace", source)
@@ -35,7 +44,7 @@ def test_every_column_has_a_comment(source):
     assert f"workspace.bronze.{source}_raw" in sql
 
 
-@pytest.mark.parametrize("source", ["sgs", "ptax"])
+@pytest.mark.parametrize("source", ["sgs", "ptax", "cvm_inf_diario"])
 def test_select_matches_table_column_order(source):
     selected = [e.split(" AS ")[-1] for e in bronze.select_expressions(source)]
     assert selected == [name for name, _, _ in bronze.columns(source)]
@@ -55,7 +64,7 @@ def test_catalog_comes_from_env(monkeypatch):
     assert bronze.default_catalog() == "workspace"
 
 
-@pytest.mark.parametrize("source", ["sgs", "ptax"])
+@pytest.mark.parametrize("source", ["sgs", "ptax", "cvm_inf_diario"])
 def test_run_uses_overwrites_available_now_and_volume_paths(source):
     spark = MagicMock()
     bronze.run(spark, "lakehouse", source)
@@ -63,7 +72,7 @@ def test_run_uses_overwrites_available_now_and_volume_paths(source):
     spark.sql.assert_called_once()
     assert f"lakehouse.bronze.{source}_raw" in spark.sql.call_args.args[0]
     reader = spark.readStream.format.return_value
-    reader.options.assert_called_once_with(**bronze.AUTO_LOADER_OPTIONS)
+    reader.options.assert_called_once_with(**bronze.reader_options(source))
     assert bronze.AUTO_LOADER_OPTIONS["cloudFiles.allowOverwrites"] == "true"
     load = reader.options.return_value.schema.return_value.load
     load.assert_called_once_with(f"/Volumes/lakehouse/bronze/landing/{source}/")
@@ -79,3 +88,17 @@ def test_run_uses_overwrites_available_now_and_volume_paths(source):
     trigger.return_value.toTable.assert_called_once_with(
         f"lakehouse.bronze.{source}_raw"
     )
+
+
+def test_json_sources_read_json_and_cvm_reads_semicolon_csv():
+    assert bronze.reader_options("sgs")["cloudFiles.format"] == "json"
+    assert bronze.reader_options("ptax")["cloudFiles.format"] == "json"
+    cvm = bronze.reader_options("cvm_inf_diario")
+    assert (cvm["cloudFiles.format"], cvm["header"], cvm["sep"]) == ("csv", "true", ";")
+    assert cvm["cloudFiles.allowOverwrites"] == "true"
+
+
+@pytest.mark.parametrize("header", [HEADER_A, HEADER_B, HEADER_C])
+def test_cvm_columns_cover_every_layout(header):
+    names = {name for name, _, _ in bronze.SOURCES["cvm_inf_diario"]["envelope"]}
+    assert set(header.split(";")) <= names

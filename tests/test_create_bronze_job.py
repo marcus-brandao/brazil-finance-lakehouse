@@ -19,10 +19,15 @@ def test_creates_the_job_when_it_does_not_exist():
     assert cbj.deploy(w, "lakehouse") == 7
     w.jobs.reset.assert_not_called()
     tasks = w.jobs.create.call_args.kwargs["tasks"]
-    assert [t.task_key for t in tasks] == ["bronze_sgs", "bronze_ptax"]
+    assert [t.task_key for t in tasks] == [
+        "bronze_sgs",
+        "bronze_ptax",
+        "bronze_cvm_inf_diario",
+    ]
     assert [t.spark_python_task.parameters for t in tasks] == [
         ["--catalog", "lakehouse", "--source", "sgs"],
         ["--catalog", "lakehouse", "--source", "ptax"],
+        ["--catalog", "lakehouse", "--source", "cvm_inf_diario"],
     ]
     assert all(t.spark_python_task.python_file.endswith("/bronze.py") for t in tasks)
     assert all(not t.depends_on for t in tasks)
