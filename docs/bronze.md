@@ -1,6 +1,6 @@
 # Bronze
 
-`databricks/bronze.py --source <name>` reads the landing files of one source with Auto Loader and appends them to `bronze.<name>_raw`. The sources are `sgs` (BACEN SGS series) and `ptax` (USD closing rate from the Olinda API). The tables have the same layout, except that `ptax_raw` has no `series_code`. Each row is one file read: the envelope fields, the raw payload as a JSON string, the file path and the file modification time. Typing and dedup happen in silver. See [ADR-0003](adr/0003-bronze-overwritten-files.md) for how a rewritten file is handled.
+`databricks/bronze.py --source <name>` reads the landing files of one source with Auto Loader and appends them to `bronze.<name>_raw`. The sources are `sgs` (BACEN SGS series), `ptax` (USD closing rate from the Olinda API) and `cvm_inf_diario` (CVM daily fund report). `sgs_raw` and `ptax_raw` have the same layout, except that `ptax_raw` has no `series_code`. Each of their rows is one file read: the envelope fields, the raw payload as a JSON string, the file path and the file modification time. `cvm_inf_diario_raw` has one row per CSV line instead, with one string column per CSV column name across the three CVM layouts, plus the file path and modification time ([ADR-0008](adr/0008-cvm-inf-diario-landing.md)). Typing and dedup happen in silver. See [ADR-0003](adr/0003-bronze-overwritten-files.md) for how a rewritten file is handled.
 
 ## Deploy
 
@@ -11,7 +11,7 @@ set -a && source .env && set +a
 uv run python databricks/create_bronze_job.py
 ```
 
-The job has two serverless Python script tasks, `bronze_sgs` and `bronze_ptax`, with no dependency between them. Each gets `--catalog <DATABRICKS_CATALOG>` and its `--source`. The Jobs API refuses a serverless task without an environment, so the job sets environment version 6, the newest on the Databricks release notes page when this was written, and no libraries. The stream uses `trigger(availableNow=True)`, the only incremental trigger besides the deprecated `once` that serverless accepts. The checkpoints are in the landing Volume at `_checkpoints/bronze_sgs_raw` and `_checkpoints/bronze_ptax_raw`. The SGS one is the path the job used before it was renamed from `bronze_sgs`, so SGS files are not read again.
+The job has three serverless Python script tasks, `bronze_sgs`, `bronze_ptax` and `bronze_cvm_inf_diario`, with no dependency between them. Each gets `--catalog <DATABRICKS_CATALOG>` and its `--source`. The Jobs API refuses a serverless task without an environment, so the job sets environment version 6, the newest on the Databricks release notes page when this was written, and no libraries. The stream uses `trigger(availableNow=True)`, the only incremental trigger besides the deprecated `once` that serverless accepts. The checkpoints are in the landing Volume at `_checkpoints/bronze_<source>_raw`. The SGS one is the path the job used before it was renamed from `bronze_sgs`, so SGS files are not read again.
 
 The job used to be called `bronze_sgs` and ran `bronze_sgs.py`. Delete that job and the old script in your workspace folder once the new job has run.
 
@@ -101,6 +101,59 @@ ORDER BY f.window_start;
 
 An empty year writes no file, so a year with no rows does not show up here. Check the connector log for those.
 
+CVM. Counts the CSV lines in each month file and the bronze rows from the newest read of the same file. `read_files` is only used for counting here, so it needs no schema. It reports the path with a `dbfs:` prefix and Auto Loader without one, so the two sides are joined on the month.
+
+```sql
+WITH files AS (
+  SELECT
+    regexp_extract(_metadata.file_path, 'month=([0-9-]+)', 1) AS month,
+    count(*) AS rows_in_file
+  FROM read_files(
+    '/Volumes/workspace/bronze/landing/cvm_inf_diario/',
+    format => 'csv',
+    header => true,
+    sep => ';'
+  )
+  GROUP BY ALL
+),
+newest AS (
+  SELECT source_file_path, max(source_file_modification_time) AS modified
+  FROM workspace.bronze.cvm_inf_diario_raw
+  GROUP BY ALL
+),
+in_table AS (
+  SELECT
+    regexp_extract(b.source_file_path, 'month=([0-9-]+)', 1) AS month,
+    count(*) AS rows_in_table
+  FROM workspace.bronze.cvm_inf_diario_raw b
+  JOIN newest n
+    ON b.source_file_path = n.source_file_path
+   AND b.source_file_modification_time = n.modified
+  GROUP BY ALL
+)
+SELECT
+  f.month,
+  f.rows_in_file,
+  t.rows_in_table,
+  f.rows_in_file = t.rows_in_table AS matches
+FROM files f
+LEFT JOIN in_table t USING (month)
+ORDER BY f.month;
+```
+
+To check that each layout filled its own columns, count the fund columns per month. Up to 2023-11 only `CNPJ_FUNDO` is set, from 2023-12 only `CNPJ_FUNDO_CLASSE`.
+
+```sql
+SELECT
+  regexp_extract(source_file_path, 'month=([0-9-]+)', 1) AS month,
+  count(CNPJ_FUNDO) AS cnpj_fundo,
+  count(CNPJ_FUNDO_CLASSE) AS cnpj_fundo_classe,
+  count(_rescued_data) AS rescued
+FROM workspace.bronze.cvm_inf_diario_raw
+GROUP BY ALL
+ORDER BY month;
+```
+
 ## Manual run in the workspace
 
 CI cannot reach Databricks, so the checks below run by hand after a change to the job. Record the date, the counts and the result under "Verified".
@@ -139,3 +192,14 @@ Run from a laptop on 2026-11-23 (UTC) against the Free Edition workspace, with t
 - `ingestion.ptax incremental` with a fresh pull fetched one window (2026), wrote `ptax/year=2026.json` and left the watermark at 2026-11-19. After the next job run the table had 44 rows. The extra row is for `year=2026.json`, now read twice, with a later `source_file_modification_time` on the second row. No other file was read again. `bronze.sgs_raw` stayed at 140 rows for 124 files.
 - `DESCRIBE TABLE EXTENDED bronze.ptax_raw` showed the table comment and a comment on all 9 columns.
 - `dbt source freshness` passed for `ptax_raw` and `sgs_raw`, and the two `not_null` tests on `ptax_raw` passed.
+
+### CVM
+
+Run on 2026-11-23 (UTC) against the Free Edition workspace.
+
+- Before any code, a test job loaded one file of each layout (200501, 202311 and 202611) with the schema from `SOURCES` and showed Auto Loader matches CSV columns by header name. A fourth file with an extra column put it in `_rescued_data` with the file path. The test files and tables were deleted afterwards.
+- From a laptop, `ingestion.cvm backfill --from 2023-01-01` took 34 s and wrote 47 month files (2023-01 to 2026-11), 2,338,382,514 bytes and 24,788,055 CSV lines, and `_state/cvm.json` with `{"inf_diario": "2026-11"}`. `ingestion.upload push` took 4 min 13 s. The first run of the `bronze` job took 48 s.
+- `bronze.cvm_inf_diario_raw` then had 24,788,055 rows for 47 files, each read once. The CVM reconciliation matched for all 47 months. 2023-01 to 2023-11 filled `TP_FUNDO` and `CNPJ_FUNDO` only, 2023-12 to 2026-11 filled `TP_FUNDO_CLASSE` and `CNPJ_FUNDO_CLASSE` only, and `_rescued_data` was empty. The table was 470 MB in 25 files (`DESCRIBE DETAIL`), about a fifth of the CSV size.
+- Run 45265550213 of the ingest workflow (incremental, `source` cvm, on this branch) refetched 2026-10 and 2026-11. After its bronze run those two months had been read twice, and the table had 25,632,412 rows. The reconciliation still matched for the newest read of every month. `bronze.sgs_raw` stayed at 144 rows for 124 files and `bronze.ptax_raw` at 45 rows for 43 files, so their tasks read nothing.
+- `information_schema.columns` shows a comment on all 15 columns of `cvm_inf_diario_raw`, and `DESCRIBE DETAIL` shows the table comment.
+- `dbt source freshness` passed for all three sources, and the two `not_null` tests on `cvm_inf_diario_raw` passed.
