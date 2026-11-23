@@ -161,9 +161,20 @@ def incremental(
         sync_series(client, series, start, now.date(), out, run_id, now)
 
 
+def select_series(series_list: list[dict], code: int | None) -> list[dict]:
+    if code is None:
+        return series_list
+    chosen = [s for s in series_list if s["code"] == code]
+    if not chosen:
+        known = ", ".join(str(s["code"]) for s in series_list)
+        raise SystemExit(f"series {code} is not in the config (known: {known})")
+    return chosen
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m ingestion.sgs")
     parser.add_argument("--out", type=Path, default=Path("out"))
+    parser.add_argument("--series", type=int, help="only this series code")
     modes = parser.add_subparsers(dest="mode", required=True)
     backfill_parser = modes.add_parser("backfill")
     backfill_parser.add_argument(
@@ -176,7 +187,7 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     now = datetime.now(UTC)
     run_id = uuid4().hex
-    series_list = load_series()
+    series_list = select_series(load_series(), args.series)
     with HttpClient(USER_AGENT, min_interval=0.5) as client:
         if args.mode == "backfill":
             end = args.end or now.date()
