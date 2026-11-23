@@ -40,7 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      # A variable, not a secret: GitHub masks a secret's value in the step summary too,
+      # and the job run link starts with the host.
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
       # An unset variable is an empty string, so || is needed for the fallback.
       DATABRICKS_CATALOG: ${{ vars.DATABRICKS_CATALOG || 'workspace' }}
