@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: sgs_series
+    description: >
+      BACEN SGS values, one row per series and date. Built from the newest
+      bronze row of each landing file, so a rewritten year file replaces the
+      rows of the old version (ADR-0006).
+      Series 432 keeps rows dated after today (BACEN publishes the Selic
+      target ahead of time). Silver does not flag them, because a flag computed
+      at build time would go stale in an incremental model. Consumers filter on
+      date <= current_date() when they need observed values only.
+      Series 11 and 12 have business days only and 433 is monthly (first day
+      of the month), so joins across series must align the dates.
+    columns:
+      - name: series_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [11, 12, 432, 433]
+              quote: false
+      - name: date
+        data_tests: [not_null]
+      - name: valor
+        description: decimal(18,6) fits 6 decimals (series 11, 12) and 2 integer digits (432, 433). Can be negative (433).
+        data_tests: [not_null]
+      - name: source_file_path
+        data_tests: [not_null]
+      - name: source_file_modification_time
+        data_tests: [not_null]
+      - name: ingested_at
+        data_tests: [not_null]
