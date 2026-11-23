@@ -31,3 +31,17 @@ sources:
             data_tests: [not_null]
           - name: payload
             data_tests: [not_null]
+      - name: cvm_inf_diario_raw
+        config:
+          # Every column is a string. Ingest runs weekly for CVM and rewrites the
+          # current month, so a file older than a week and a day means a missed run.
+          loaded_at_field: source_file_modification_time
+          freshness:
+            warn_after: {count: 8, period: day}
+            error_after: {count: 15, period: day}
+        columns:
+          # The CNPJ column has a different name in each layout, so it has no test.
+          - name: DT_COMPTC
+            data_tests: [not_null]
+          - name: source_file_path
+            data_tests: [not_null]

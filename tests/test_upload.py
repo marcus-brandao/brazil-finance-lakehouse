@@ -94,23 +94,30 @@ def test_upload_error_is_raised(tmp_path):
         upload.push(w, make_out(tmp_path))
 
 
-def test_both_state_files_are_uploaded_after_all_data(tmp_path):
+def test_every_state_file_is_uploaded_after_all_data(tmp_path):
     out = make_out(tmp_path)
     (out / "ptax").mkdir()
     (out / "ptax/year=2025.json").write_text("{}")
     (out / "_state/ptax.json").write_text('{"usd": "2025-12-31"}')
+    (out / "cvm_inf_diario").mkdir()
+    (out / "cvm_inf_diario/month=2026-11.csv").write_text("DT_COMPTC\r\n")
+    (out / "_state/cvm.json").write_text('{"inf_diario": "2026-11"}')
     w = MagicMock()
     upload.push(w, out)
     targets = [c.args[0] for c in w.files.upload.call_args_list]
-    assert all("_state/" not in t for t in targets[:2])
-    assert sorted(t.rsplit("/", 1)[1] for t in targets[2:]) == ["ptax.json", "sgs.json"]
+    assert all("_state/" not in t for t in targets[:3])
+    assert sorted(t.rsplit("/", 1)[1] for t in targets[3:]) == [
+        "cvm.json",
+        "ptax.json",
+        "sgs.json",
+    ]
 
 
-def test_pull_reads_both_state_files_and_survives_one_missing(tmp_path):
+def test_pull_reads_every_state_file_and_survives_missing_ones(tmp_path):
     w = MagicMock()
 
     def download(path):
-        if path.endswith("ptax.json"):
+        if not path.endswith("sgs.json"):
             raise NotFound("missing")
         return MagicMock(contents=io.BytesIO(b'{"432": "2025-06-30"}'))
 
@@ -118,3 +125,4 @@ def test_pull_reads_both_state_files_and_survives_one_missing(tmp_path):
     upload.pull_state(w, tmp_path)
     assert (tmp_path / "_state/sgs.json").exists()
     assert not (tmp_path / "_state/ptax.json").exists()
+    assert not (tmp_path / "_state/cvm.json").exists()

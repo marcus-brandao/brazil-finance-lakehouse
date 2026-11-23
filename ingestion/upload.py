@@ -6,13 +6,13 @@ from pathlib import Path
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.errors import NotFound
 
-from ingestion import ptax, sgs
+from ingestion import cvm, ptax, sgs
 
 log = logging.getLogger("ingestion.upload")
 
 # Same Volume that databricks/setup_workspace.py creates (bronze.landing).
 VOLUME = "/Volumes/{catalog}/bronze/landing"
-STATE_FILES = [sgs.STATE_FILE, ptax.STATE_FILE]
+STATE_FILES = [sgs.STATE_FILE, ptax.STATE_FILE, cvm.STATE_FILE]
 
 
 def volume_root() -> str:
