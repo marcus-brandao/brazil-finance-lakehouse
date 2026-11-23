@@ -33,7 +33,7 @@ uv run python -m ingestion.upload push
 
 Every pull request and every push to `main` runs `make lint` and `make test` on GitHub Actions ([ci.yml](.github/workflows/ci.yml)). The run summary shows the coverage table. Tests mock HTTP, so CI needs no secrets and no access to BCB or Databricks. One test runs the SGS CLI end to end (backfill, then incremental) against a mocked API.
 
-`databricks/bronze_sgs.py` reads the landing files with Auto Loader into `bronze.sgs_raw`. A file rewritten at the same path is read again and appended as a new row, with the file path and modification time kept as columns ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)). `databricks/create_bronze_job.py` creates the serverless job. How to deploy it, a reconciliation query and the manual checks are in [docs/bronze.md](docs/bronze.md). The job has not been run in a workspace yet, and CI does not run it.
+`databricks/bronze_sgs.py` reads the landing files with Auto Loader into `bronze.sgs_raw`. A file rewritten at the same path is read again and appended as a new row, with the file path and modification time kept as columns ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)). `databricks/create_bronze_job.py` creates the serverless job. How to deploy it, a reconciliation query and the manual checks are in [docs/bronze.md](docs/bronze.md). It has been run by hand in a Free Edition workspace and its output reconciled with the files (see the Verified section there). CI does not run it.
 
 Nothing runs on a schedule yet. The first pipeline, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
 

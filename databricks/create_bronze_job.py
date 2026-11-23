@@ -5,23 +5,40 @@ import os
 from pathlib import Path
 
 from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.jobs import JobSettings, SparkPythonTask, Task
+from databricks.sdk.service.compute import Environment
+from databricks.sdk.service.jobs import (
+    JobEnvironment,
+    JobSettings,
+    SparkPythonTask,
+    Task,
+)
 from databricks.sdk.service.workspace import ImportFormat
 
 JOB_NAME = "bronze_sgs"
 SCRIPT = Path(__file__).parent / "bronze_sgs.py"
 FALLBACK_CATALOG = "workspace"
+ENVIRONMENT_KEY = "default"
 
 
 def job_settings(script_path: str, catalog: str) -> JobSettings:
-    # No compute is set: Free Edition only has serverless, which jobs use by default.
+    # Serverless tasks need an environment. The script has no dependencies, so only
+    # the version is set. 6 was the newest on the release notes page (2026-11-22).
+    environment = JobEnvironment(
+        environment_key=ENVIRONMENT_KEY, spec=Environment(environment_version="6")
+    )
     task = Task(
         task_key="bronze_sgs",
+        environment_key=ENVIRONMENT_KEY,
         spark_python_task=SparkPythonTask(
             python_file=script_path, parameters=["--catalog", catalog]
         ),
     )
-    return JobSettings(name=JOB_NAME, tasks=[task], max_concurrent_runs=1)
+    return JobSettings(
+        name=JOB_NAME,
+        tasks=[task],
+        environments=[environment],
+        max_concurrent_runs=1,
+    )
 
 
 def deploy(w: WorkspaceClient, catalog: str) -> int:
@@ -39,6 +56,7 @@ def deploy(w: WorkspaceClient, catalog: str) -> int:
         created = w.jobs.create(
             name=settings.name,
             tasks=settings.tasks,
+            environments=settings.environments,
             max_concurrent_runs=settings.max_concurrent_runs,
         )
         return created.job_id

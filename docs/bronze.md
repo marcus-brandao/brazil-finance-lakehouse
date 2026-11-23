@@ -11,7 +11,7 @@ set -a && source .env && set +a
 uv run python databricks/create_bronze_job.py
 ```
 
-The job has one serverless Python script task with `--catalog <DATABRICKS_CATALOG>` as its parameter. The stream uses `trigger(availableNow=True)`, the only incremental trigger besides the deprecated `once` that serverless accepts. The checkpoint is in the landing Volume at `_checkpoints/bronze_sgs_raw`.
+The job has one serverless Python script task with `--catalog <DATABRICKS_CATALOG>` as its parameter. The Jobs API refuses a serverless task without an environment, so the job sets environment version 6, the newest on the Databricks release notes page when this was written, and no dependencies. The stream uses `trigger(availableNow=True)`, the only incremental trigger besides the deprecated `once` that serverless accepts. The checkpoint is in the landing Volume at `_checkpoints/bronze_sgs_raw`.
 
 ## Run
 
@@ -75,4 +75,9 @@ CI cannot reach Databricks, so the checks below run by hand after a change to th
 
 ## Verified
 
-Not run yet.
+Run by hand in a Free Edition workspace on 2026-11-22 and 2026-11-23 (UTC), with the four series for 2025 in the landing Volume.
+
+- First run: the reconciliation query returned `matches = true` for series 11, 12, 432 and 433 (252, 252, 365 and 12 records).
+- After a second run with no file changed, each file had been read once.
+- Series 432 was uploaded again with `ingestion.upload push`. The next run added one row for `series_code=432/year=2025.json` with a later `source_file_modification_time`, and left the other three files alone. The table then had 5 rows.
+- `DESCRIBE TABLE EXTENDED bronze.sgs_raw` showed the table comment and a comment on all 10 columns.
