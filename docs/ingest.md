@@ -57,4 +57,9 @@ Run on GitHub on 2026-11-23 (UTC).
 - Run 45113207172 backfilled all four series from 1995-01-01 in 2m56s and uploaded 124 year files plus the state file. The reconciliation query in bronze.md matched for every file.
 - Check 3: no scheduled run yet. The first one is due at 09:17 UTC on 2026-11-23.
 
-PTAX (#42), 2026-11-23. The workflow has not run on GitHub with the PTAX steps yet, because the change was not merged. The same commands were run from a laptop with the workflow's `.env` values (`ingestion.upload pull`, `ingestion.ptax backfill --from 1984-01-01`, `ingestion.upload push`, `databricks/create_bronze_job.py`, `databricks/run_bronze_job.py`). Checks 3 and 4 above are still open and belong to the first runs after the merge. Results are in the Verified section of [bronze.md](bronze.md).
+PTAX (#42), 2026-11-23.
+
+- Before the merge, the same commands were run from a laptop with the workflow's `.env` values (`ingestion.upload pull`, `ingestion.ptax backfill --from 1984-01-01`, `ingestion.upload push`, `databricks/create_bronze_job.py`, `databricks/run_bronze_job.py`). The results are in the Verified section of [bronze.md](bronze.md).
+- The 09:17 UTC schedule did not start a run that day. The workflow had no `schedule` runs at all, before or after the merge, and none was cancelled. The manual runs of the night before had finished long before 09:17, and `cancel-in-progress` is false. The cause is not known.
+- Run 45209377853 (manual, `mode` incremental, `source` all, on `main` after the merge) was green in about 1.5 minutes. The steps Fetch SGS, Fetch PTAX, push and the `bronze` job all succeeded. Afterwards `bronze.ptax_raw` had 45 rows for 43 files, with `ptax/year=2026.json` read three times, and `bronze.sgs_raw` had 144 rows for 124 files (the four 2026 files read once more).
+- Check 3 is done by that manual run. Check 4 (the first run with the `schedule` event) is still open.
