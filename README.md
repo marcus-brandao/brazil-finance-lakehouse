@@ -19,6 +19,7 @@ BACEN SGS series 432 (Selic target), 11 (daily Selic), 12 (CDI) and 433 (IPCA) l
 - `ingestion/upload.py` moves the files and the watermark state to the landing Volume with the Databricks Files API.
 - `databricks/bronze_sgs.py` reads the landing files with Auto Loader. A rewritten file comes back as a new row, and silver will keep the newest one ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)).
 - `.github/workflows/ingest.yml` runs all of it at 09:17 UTC and can backfill a single series from the Actions tab ([ADR-0004](docs/adr/0004-ingest-workflow.md)).
+- `dbt/` declares `bronze.sgs_raw` as a source with a freshness check and null tests. `make dbt-build` runs them against the Free Edition SQL warehouse ([ADR-0005](docs/adr/0005-where-dbt-runs.md)). There are no models yet.
 - CI runs `make lint` and `make test` on every pull request and push to `main`. Tests mock HTTP, so CI needs no secrets, and the run fails if coverage drops below 90%.
 
 The bronze job and the workflow were checked by hand against a Free Edition workspace. The results are in the Verified sections of [docs/bronze.md](docs/bronze.md) and [docs/ingest.md](docs/ingest.md).
@@ -68,7 +69,7 @@ Solid: built in M1. Dashed: planned for later milestones.
 |---|---|---|---|
 | Ingestion | Python 3.12, `uv`, GitHub Actions | [ADR-0001](docs/adr/0001-platform.md): Free Edition egress is restricted | ✅ built · M1 |
 | Platform | Databricks Free Edition: Unity Catalog, Delta, Auto Loader | [ADR-0001](docs/adr/0001-platform.md) | ✅ built · M1 |
-| Transform | dbt | [ADR-0001](docs/adr/0001-platform.md) | ⬜ planned · M2 |
+| Transform | dbt | [ADR-0001](docs/adr/0001-platform.md), [ADR-0005](docs/adr/0005-where-dbt-runs.md) | 🚧 in progress · M2 |
 | BI | Evidence, Databricks AI/BI dashboards | [ADR-0001](docs/adr/0001-platform.md) | ⬜ planned · M3 |
 | Quality | ruff, pytest, pytest-cov, pre-commit, GitHub Actions CI | Standard Python tooling, no ADR | ✅ built |
 
@@ -91,7 +92,7 @@ Tracked as [milestones](https://github.com/marcus-brandao/brazil-finance-lakehou
 | | Milestone | Focus |
 |---|---|---|
 | ✅ | [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1) | Foundations, and BACEN SGS landing daily in bronze with full history |
-| ⬜ | [M2](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/2) | Silver and gold with dbt, plus more sources |
+| 🚧 | [M2](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/2) | Silver and gold with dbt, plus more sources |
 | ⬜ | [M3](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/3) | BI and v1: Evidence site and AI/BI dashboards |
 | ⬜ | [M4](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/4) | PII and identity resolution, on synthetic seeded data |
 | ⬜ | [M5](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/5) | Streaming |

@@ -10,3 +10,7 @@ data/
 *.csv
 out/
 .coverage
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml

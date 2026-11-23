@@ -3,11 +3,14 @@ name = "brazil-finance-lakehouse"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "databricks-sdk>=0.169.0",
+    "databricks-sdk>=0.100",
     "httpx>=0.28.1",
 ]
 
 [dependency-groups]
+dbt = [
+    "dbt-databricks>=1.13.1",
+]
 dev = [
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",

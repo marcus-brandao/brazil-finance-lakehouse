@@ -38,6 +38,19 @@ Rerunning it leaves existing objects alone. The last line prints the catalog it 
 
 Ingestion runs on GitHub Actions, so the workflows need the same credentials. In the repo, open Settings, Secrets and variables, Actions. Add `DATABRICKS_TOKEN` as a secret. Add `DATABRICKS_HOST` as a repository variable under the Variables tab, because the workspace URL is not a credential and GitHub would hide it in the run summary if it were a secret. If you use a catalog other than `workspace`, add a variable `DATABRICKS_CATALOG` too.
 
+## 6. Check dbt
+
+dbt connects to the workspace's SQL warehouse. In the workspace, open SQL Warehouses, then the warehouse (Free Edition has one, "Serverless Starter Warehouse"), then Connection details, and copy the HTTP path into `DATABRICKS_HTTP_PATH` in `.env`.
+
+```bash
+set -a && source .env && set +a
+uv sync --group dbt
+uv run --group dbt dbt debug --project-dir dbt --profiles-dir dbt
+make dbt-build
+```
+
+`dbt debug` ends with "All checks passed!". `make dbt-build` checks that `bronze.sgs_raw` was loaded in the last 48 hours, then runs the dbt tests. Run it after the first ingest, or the freshness check fails on an empty table.
+
 ## Rebuilding
 
-The workspace can be deleted or lost to inactivity. Repeat steps 1 to 5 on a new one. Nothing else in the repo depends on the old workspace.
+The workspace can be deleted or lost to inactivity. Repeat steps 1 to 6 on a new one. Nothing else in the repo depends on the old workspace.
