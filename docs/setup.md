@@ -36,7 +36,7 @@ Rerunning it leaves existing objects alone. The last line prints the catalog it 
 
 ## 5. Add GitHub secrets
 
-Ingestion runs on GitHub Actions, so the workflows need the same credentials. In the repo, open Settings, Secrets and variables, Actions, and add `DATABRICKS_HOST` and `DATABRICKS_TOKEN`.
+Ingestion runs on GitHub Actions, so the workflows need the same credentials. In the repo, open Settings, Secrets and variables, Actions, and add `DATABRICKS_HOST` and `DATABRICKS_TOKEN`. If you use a catalog other than `workspace`, also add a repository variable `DATABRICKS_CATALOG` under the Variables tab.
 
 ## Rebuilding
 

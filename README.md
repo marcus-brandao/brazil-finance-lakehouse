@@ -12,7 +12,7 @@ This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is par
 
 ## What works today
 
-Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`), a script that sets up the Databricks workspace (see [docs/setup.md](docs/setup.md)), a shared HTTP client in `ingestion/http.py`, a BACEN SGS connector in `ingestion/sgs.py` and an uploader in `ingestion/upload.py` and a bronze job in `databricks/bronze_sgs.py`.
+Repo scaffolding (a `uv` project, `ruff` lint and format, `pytest`, pre-commit hooks and a `Makefile`), a script that sets up the Databricks workspace (see [docs/setup.md](docs/setup.md)), a shared HTTP client in `ingestion/http.py`, a BACEN SGS connector in `ingestion/sgs.py` and an uploader in `ingestion/upload.py`, a bronze job in `databricks/bronze_sgs.py` and a daily GitHub Actions workflow that runs all of it.
 
 The HTTP client retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After`, fails fast on other 4xx and on redirects, spaces out calls and logs one JSON line per attempt.
 
@@ -35,7 +35,7 @@ Every pull request and every push to `main` runs `make lint` and `make test` on 
 
 `databricks/bronze_sgs.py` reads the landing files with Auto Loader into `bronze.sgs_raw`. A file rewritten at the same path is read again and appended as a new row, with the file path and modification time kept as columns ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)). `databricks/create_bronze_job.py` creates the serverless job. How to deploy it, a reconciliation query and the manual checks are in [docs/bronze.md](docs/bronze.md). It has been run by hand in a Free Edition workspace and its output reconciled with the files (see the Verified section there). CI does not run it.
 
-Nothing runs on a schedule yet. The first pipeline, BACEN SGS landing daily in bronze, is being built in [M1](https://github.com/marcus-brandao/brazil-finance-lakehouse/milestone/1).
+`.github/workflows/ingest.yml` runs every day at 09:17 UTC: it pulls the state file, fetches the four series, pushes the files and the state to the Volume, runs the `bronze_sgs` job and waits for it. A manual run takes a mode, a date range and one series code, so a single series can be backfilled from the Actions tab. The link to the Databricks job run is in the step summary. The job has to be created first with `databricks/create_bronze_job.py`. See [docs/ingest.md](docs/ingest.md) and [ADR-0004](docs/adr/0004-ingest-workflow.md). The workflow has not been run on GitHub yet, so the Verified section there is empty.
 
 ## Architecture
 

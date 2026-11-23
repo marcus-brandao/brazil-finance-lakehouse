@@ -1,0 +1,72 @@
+name: Ingest SGS
+
+on:
+  schedule:
+    # 09:17 UTC (06:17 in Brasília). BCB publishes the daily Selic (series 11 and 12)
+    # by 19:00 Brasília time on each business day, and Copom decisions (432) come out
+    # in the evening, so the next morning has the previous day's values. The :17
+    # keeps the run off the top of the hour, when GitHub is busiest. GitHub cron can
+    # start late or skip a run, and incremental catches up on the next one because
+    # it starts from the stored watermark minus the lookback.
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: incremental, or backfill (needs from)
+        type: choice
+        options: [incremental, backfill]
+        default: incremental
+      from:
+        description: "Backfill start, yyyy-mm-dd"
+        type: string
+      to:
+        description: "Backfill end, yyyy-mm-dd (default: today)"
+        type: string
+      series:
+        description: "Only this SGS series code, for example 433 (default: all)"
+        type: string
+
+permissions:
+  contents: read
+
+# Runs queue instead of cancelling the one in progress: a cancelled run could stop
+# after the upload and before the bronze job. See ADR-0004.
+concurrency:
+  group: ingest-sgs
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      # An unset variable is an empty string, so || is needed for the fallback.
+      DATABRICKS_CATALOG: ${{ vars.DATABRICKS_CATALOG || 'workspace' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          version: "0.13.9"
+          python-version: "3.12"
+      - run: uv sync --locked
+      # Backfills pull too: the state file on the Volume is replaced on push (ADR-0002).
+      - run: uv run python -m ingestion.upload pull
+      - name: Fetch from BACEN
+        # Inputs go through env and an array, never into the script text. The
+        # connector's argument parser validates them before anything is fetched.
+        env:
+          MODE: ${{ inputs.mode || 'incremental' }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+          SERIES: ${{ inputs.series }}
+        run: |
+          args=()
+          if [ -n "$SERIES" ]; then args+=(--series "$SERIES"); fi
+          args+=("$MODE")
+          if [ -n "$FROM" ]; then args+=(--from "$FROM"); fi
+          if [ -n "$TO" ]; then args+=(--to "$TO"); fi
+          uv run python -m ingestion.sgs "${args[@]}"
+      - run: uv run python -m ingestion.upload push
+      - run: uv run python databricks/run_bronze_job.py
