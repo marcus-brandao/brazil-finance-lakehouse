@@ -13,6 +13,7 @@ from ingestion.sgs import (
     main,
     parse_date,
     read_state,
+    select_series,
     window_path,
     year_windows,
 )
@@ -396,3 +397,37 @@ def test_cli_backfill_then_incremental_against_mocked_http(tmp_path, monkeypatch
 
     main([*out, "incremental"])
     assert read_state(tmp_path) == {str(code): "2024-12-02" for code in codes}
+
+
+def test_select_series_keeps_one_or_all():
+    series = load_series()
+    assert select_series(series, None) == series
+    assert [s["code"] for s in select_series(series, 433)] == [433]
+
+
+def test_select_series_rejects_an_unknown_code():
+    with pytest.raises(SystemExit) as e:
+        select_series(load_series(), 99999)
+    assert "99999" in str(e.value)
+
+
+def test_cli_single_series_backfill_keeps_the_other_watermarks(tmp_path, monkeypatch):
+    h = fake_api({(433, 2024): [row("01/12/2024")]})
+    real_client = HttpClient
+    monkeypatch.setattr(
+        "ingestion.sgs.HttpClient",
+        lambda user_agent, **kw: real_client(
+            user_agent, transport=httpx.MockTransport(h), sleep=lambda s: None
+        ),
+    )
+    # What the workflow does: pull the state first, then backfill one series.
+    (tmp_path / "_state").mkdir()
+    (tmp_path / "_state/sgs.json").write_text('{"11": "2025-01-02"}')
+
+    main(
+        ["--out", str(tmp_path), "--series", "433", "backfill", "--from", "2024-01-01"]
+    )
+
+    assert read_state(tmp_path) == {"11": "2025-01-02", "433": "2024-12-01"}
+    assert (tmp_path / "sgs/series_code=433/year=2024.json").exists()
+    assert not (tmp_path / "sgs/series_code=11").exists()
