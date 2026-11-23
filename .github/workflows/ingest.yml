@@ -1,10 +1,11 @@
-name: Ingest SGS
+name: Ingest
 
 on:
   schedule:
     # 09:17 UTC (06:17 in Brasília). BCB publishes the daily Selic (series 11 and 12)
     # by 19:00 Brasília time on each business day, and Copom decisions (432) come out
-    # in the evening, so the next morning has the previous day's values. The :17
+    # in the evening. The PTAX closing rows are stamped around 13:00.
+    # So the next morning has the previous day's values for all of them. The :17
     # keeps the run off the top of the hour, when GitHub is busiest. GitHub cron can
     # start late or skip a run, and incremental catches up on the next one because
     # it starts from the stored watermark minus the lookback.
@@ -22,8 +23,13 @@ on:
       to:
         description: "Backfill end, yyyy-mm-dd (default: today)"
         type: string
+      source:
+        description: Which source to fetch
+        type: choice
+        options: [all, sgs, ptax]
+        default: all
       series:
-        description: "Only this SGS series code, for example 433 (default: all)"
+        description: "Only this SGS series code, for example 433 (default: all). Ignored for ptax"
         type: string
 
 permissions:
@@ -32,7 +38,7 @@ permissions:
 # Runs queue instead of cancelling the one in progress: a cancelled run could stop
 # after the upload and before the bronze job. See ADR-0004.
 concurrency:
-  group: ingest-sgs
+  group: ingest
   cancel-in-progress: false
 
 jobs:
@@ -55,7 +61,8 @@ jobs:
       - run: uv sync --locked
       # Backfills pull too: the state file on the Volume is replaced on push (ADR-0002).
       - run: uv run python -m ingestion.upload pull
-      - name: Fetch from BACEN
+      - name: Fetch SGS
+        if: ${{ (inputs.source || 'all') != 'ptax' }}
         # Inputs go through env and an array, never into the script text. The
         # connector's argument parser validates them before anything is fetched.
         env:
@@ -70,5 +77,16 @@ jobs:
           if [ -n "$FROM" ]; then args+=(--from "$FROM"); fi
           if [ -n "$TO" ]; then args+=(--to "$TO"); fi
           uv run python -m ingestion.sgs "${args[@]}"
+      - name: Fetch PTAX
+        if: ${{ (inputs.source || 'all') != 'sgs' }}
+        env:
+          MODE: ${{ inputs.mode || 'incremental' }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+        run: |
+          args=("$MODE")
+          if [ -n "$FROM" ]; then args+=(--from "$FROM"); fi
+          if [ -n "$TO" ]; then args+=(--to "$TO"); fi
+          uv run python -m ingestion.ptax "${args[@]}"
       - run: uv run python -m ingestion.upload push
       - run: uv run python databricks/run_bronze_job.py

@@ -18,11 +18,17 @@ def test_creates_the_job_when_it_does_not_exist():
     w.jobs.create.return_value.job_id = 7
     assert cbj.deploy(w, "lakehouse") == 7
     w.jobs.reset.assert_not_called()
-    task = w.jobs.create.call_args.kwargs["tasks"][0]
-    assert task.spark_python_task.parameters == ["--catalog", "lakehouse"]
-    assert task.spark_python_task.python_file.endswith("/bronze_sgs.py")
+    tasks = w.jobs.create.call_args.kwargs["tasks"]
+    assert [t.task_key for t in tasks] == ["bronze_sgs", "bronze_ptax"]
+    assert [t.spark_python_task.parameters for t in tasks] == [
+        ["--catalog", "lakehouse", "--source", "sgs"],
+        ["--catalog", "lakehouse", "--source", "ptax"],
+    ]
+    assert all(t.spark_python_task.python_file.endswith("/bronze.py") for t in tasks)
+    assert all(not t.depends_on for t in tasks)
     environment = w.jobs.create.call_args.kwargs["environments"][0]
-    assert task.environment_key == environment.environment_key
+    assert all(t.environment_key == environment.environment_key for t in tasks)
+    assert w.jobs.create.call_args.kwargs["name"] == "bronze"
     assert environment.spec.environment_version
 
 

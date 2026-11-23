@@ -12,14 +12,15 @@ This is a portfolio project, so the process (issues, ADRs, small PRs, CI) is par
 
 ## What works today
 
-BACEN SGS series 432 (Selic target), 11 (daily Selic), 12 (CDI) and 433 (IPCA) land in `bronze.sgs_raw` every day, with history back to 1995.
+BACEN SGS series 432 (Selic target), 11 (daily Selic), 12 (CDI) and 433 (IPCA) land in `bronze.sgs_raw` every day, with history back to 1995. The USD/BRL closing PTAX lands in `bronze.ptax_raw` the same way, with history back to 1984.
 
 - `ingestion/sgs.py` fetches each series in calendar-year windows and writes one file per series and year, with the raw payload inside a wrapper that records the window, `ingested_at` and `run_id`. Re-running a window overwrites the same file. `incremental` starts from a per-series watermark minus a lookback, so revised values are picked up ([ADR-0002](docs/adr/0002-sgs-windows-and-watermark.md)).
+- `ingestion/ptax.py` does the same for the PTAX rate from the BACEN Olinda API: one file per calendar year at `ptax/year=<yyyy>.json`, its own watermark in `_state/ptax.json`, a 10 day lookback ([ADR-0007](docs/adr/0007-ptax-windows-and-watermark.md)).
 - `ingestion/http.py` retries 429, 5xx and connection errors with exponential backoff and jitter, honors `Retry-After` and fails fast on other 4xx.
-- `ingestion/upload.py` moves the files and the watermark state to the landing Volume with the Databricks Files API.
-- `databricks/bronze_sgs.py` reads the landing files with Auto Loader. A rewritten file comes back as a new row, and silver keeps the newest one ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)).
-- `.github/workflows/ingest.yml` runs all of it at 09:17 UTC and can backfill a single series from the Actions tab ([ADR-0004](docs/adr/0004-ingest-workflow.md)).
-- `dbt/` declares `bronze.sgs_raw` as a source with a freshness check and null tests. `make dbt-build` runs them against the Free Edition SQL warehouse ([ADR-0005](docs/adr/0005-where-dbt-runs.md)). `silver.sgs_series` is an incremental model with one row per series and date, typed and deduplicated: it keeps the newest bronze row of each landing file and replaces a file's rows when the file is rewritten ([ADR-0006](docs/adr/0006-silver-sgs-dedup.md)). Tests cover uniqueness, not-null, accepted series codes and a reconciliation against bronze.
+- `ingestion/upload.py` moves the files and the watermark state files to the landing Volume with the Databricks Files API.
+- `databricks/bronze.py` reads the landing files of one source (`--source sgs` or `ptax`) with Auto Loader, and the `bronze` job runs one task per source. A rewritten file comes back as a new row, and silver keeps the newest one ([ADR-0003](docs/adr/0003-bronze-overwritten-files.md)).
+- `.github/workflows/ingest.yml` runs both connectors and the bronze job at 09:17 UTC and can backfill one source or one SGS series from the Actions tab ([ADR-0004](docs/adr/0004-ingest-workflow.md)).
+- `dbt/` declares `bronze.sgs_raw` and `bronze.ptax_raw` as sources with a freshness check and null tests. `make dbt-build` runs them against the Free Edition SQL warehouse ([ADR-0005](docs/adr/0005-where-dbt-runs.md)). `silver.sgs_series` is an incremental model with one row per series and date, typed and deduplicated: it keeps the newest bronze row of each landing file and replaces a file's rows when the file is rewritten ([ADR-0006](docs/adr/0006-silver-sgs-dedup.md)). Tests cover uniqueness, not-null, accepted series codes and a reconciliation against bronze.
 - CI runs `make lint` and `make test` on every pull request and push to `main`. Tests mock HTTP, so CI needs no secrets, and the run fails if coverage drops below 90%.
 
 The bronze job and the workflow were checked by hand against a Free Edition workspace. The results are in the Verified sections of [docs/bronze.md](docs/bronze.md) and [docs/ingest.md](docs/ingest.md).
@@ -30,6 +31,7 @@ The bronze job and the workflow were checked by hand against a Free Edition work
 flowchart LR
     subgraph src[Open data]
         sgs[BACEN SGS]
+        ptax[BACEN PTAX]
         cvm["CVM<br/>(planned · M2)"]
     end
 
@@ -47,6 +49,7 @@ flowchart LR
     bi["Evidence site<br/>AI/BI dashboards<br/>(planned · M3)"]
 
     sgs --> conn
+    ptax --> conn
     cvm -.-> conn
     conn --> vol --> bronze
     bronze -.-> silver -.-> gold -.-> bi
@@ -106,7 +109,7 @@ Requires [`uv`](https://docs.astral.sh/uv/) and a [Databricks Free Edition](http
 1. Clone the repo, then run `uv sync`, `uv run pre-commit install` and `make lint test`.
 2. Set up the workspace, the `.env` file and the GitHub secrets with [docs/setup.md](docs/setup.md).
 3. Create the bronze job with `databricks/create_bronze_job.py` ([docs/bronze.md](docs/bronze.md#deploy)).
-4. In the Actions tab, run Ingest SGS with mode `backfill` and a start date. The daily schedule takes over from there ([docs/ingest.md](docs/ingest.md)).
+4. In the Actions tab, run Ingest with mode `backfill`, source `sgs` and a start date, then again with source `ptax` and start date `1984-01-01`. The daily schedule takes over from there ([docs/ingest.md](docs/ingest.md)).
 
 ## Docs
 
@@ -121,9 +124,10 @@ Requires [`uv`](https://docs.astral.sh/uv/) and a [Databricks Free Edition](http
 Data comes from open sources and is never committed to this repo.
 
 - [BACEN SGS](https://dadosabertos.bcb.gov.br/): Banco Central do Brasil time-series system
+- [BACEN PTAX](https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/aplicacao#!/recursos): USD/BRL closing rate, from the Olinda open data service
 - [CVM open data](https://dados.cvm.gov.br/): Comissão de Valores Mobiliários
 
-Both are published under the Open Database License (ODbL); attribution is kept here.
+All three are published under the Open Database License (ODbL); attribution is kept here.
 
 ## License
 

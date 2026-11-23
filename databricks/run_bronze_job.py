@@ -1,4 +1,4 @@
-# Starts the bronze_sgs job, waits for it and fails unless it succeeded. The run URL
+# Starts the bronze job, waits for it and fails unless it succeeded. The run URL
 # goes to the GitHub step summary before the wait, so it is there even if the run fails.
 
 import os

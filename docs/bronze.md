@@ -1,25 +1,27 @@
-# Bronze: SGS
+# Bronze
 
-`databricks/bronze_sgs.py` reads the landing files of BACEN SGS with Auto Loader and appends them to `bronze.sgs_raw`. Each row is one file read: the envelope fields, the raw payload as a JSON string, the file path and the file modification time. Typing and dedup happen in silver. See [ADR-0003](adr/0003-bronze-overwritten-files.md) for how a rewritten file is handled.
+`databricks/bronze.py --source <name>` reads the landing files of one source with Auto Loader and appends them to `bronze.<name>_raw`. The sources are `sgs` (BACEN SGS series) and `ptax` (USD closing rate from the Olinda API). The tables have the same layout, except that `ptax_raw` has no `series_code`. Each row is one file read: the envelope fields, the raw payload as a JSON string, the file path and the file modification time. Typing and dedup happen in silver. See [ADR-0003](adr/0003-bronze-overwritten-files.md) for how a rewritten file is handled.
 
 ## Deploy
 
-`create_bronze_job.py` uploads the script to your workspace folder and creates the job `bronze_sgs`, or updates it if it exists. It does not start a run. It uses the same `.env` as the other scripts (see [setup.md](setup.md)).
+`create_bronze_job.py` uploads the script to your workspace folder and creates the job `bronze`, or updates it if it exists. It does not start a run. It uses the same `.env` as the other scripts (see [setup.md](setup.md)).
 
 ```bash
 set -a && source .env && set +a
 uv run python databricks/create_bronze_job.py
 ```
 
-The job has one serverless Python script task with `--catalog <DATABRICKS_CATALOG>` as its parameter. The Jobs API refuses a serverless task without an environment, so the job sets environment version 6, the newest on the Databricks release notes page when this was written, and no dependencies. The stream uses `trigger(availableNow=True)`, the only incremental trigger besides the deprecated `once` that serverless accepts. The checkpoint is in the landing Volume at `_checkpoints/bronze_sgs_raw`.
+The job has two serverless Python script tasks, `bronze_sgs` and `bronze_ptax`, with no dependency between them. Each gets `--catalog <DATABRICKS_CATALOG>` and its `--source`. The Jobs API refuses a serverless task without an environment, so the job sets environment version 6, the newest on the Databricks release notes page when this was written, and no libraries. The stream uses `trigger(availableNow=True)`, the only incremental trigger besides the deprecated `once` that serverless accepts. The checkpoints are in the landing Volume at `_checkpoints/bronze_sgs_raw` and `_checkpoints/bronze_ptax_raw`. The SGS one is the path the job used before it was renamed from `bronze_sgs`, so SGS files are not read again.
+
+The job used to be called `bronze_sgs` and ran `bronze_sgs.py`. Delete that job and the old script in your workspace folder once the new job has run.
 
 ## Run
 
-In the workspace, open Jobs & Pipelines, open `bronze_sgs` and choose Run now. A run reads the files that are new or changed since the last run and stops.
+In the workspace, open Jobs & Pipelines, open `bronze` and choose Run now. A run reads the files that are new or changed since the last run and stops.
 
 ## Reconciliation
 
-Compares the number of records in each landing file with the number of records in the newest bronze row for the same file. Run it in the SQL editor, with your catalog in place of `workspace`. Add a filter on `series_code` and `window_start` to check one window.
+SGS. Compares the number of records in each landing file with the number of records in the newest bronze row for the same file. Run it in the SQL editor, with your catalog in place of `workspace`. Add a filter on `series_code` and `window_start` to check one window.
 
 ```sql
 WITH files AS (
@@ -64,14 +66,49 @@ GROUP BY source_file_path
 ORDER BY source_file_path;
 ```
 
+PTAX. The same comparison, per year file.
+
+```sql
+WITH files AS (
+  SELECT
+    window_start,
+    json_array_length(payload) AS records_in_file
+  FROM read_files(
+    '/Volumes/workspace/bronze/landing/ptax/',
+    format => 'json',
+    schema => 'window_start STRING, payload STRING'
+  )
+),
+newest AS (
+  SELECT
+    window_start,
+    json_array_length(payload) AS records_in_table
+  FROM workspace.bronze.ptax_raw
+  QUALIFY row_number() OVER (
+    PARTITION BY source_file_path
+    ORDER BY source_file_modification_time DESC
+  ) = 1
+)
+SELECT
+  f.window_start,
+  f.records_in_file,
+  n.records_in_table,
+  f.records_in_file = n.records_in_table AS matches
+FROM files f
+LEFT JOIN newest n USING (window_start)
+ORDER BY f.window_start;
+```
+
+An empty year writes no file, so a year with no rows does not show up here. Check the connector log for those.
+
 ## Manual run in the workspace
 
 CI cannot reach Databricks, so the checks below run by hand after a change to the job. Record the date, the counts and the result under "Verified".
 
-1. Run the job. Run the reconciliation query. All rows match.
-2. Run the job again without changing any file. `count(*)` on `bronze.sgs_raw` stays the same.
+1. Run the job. Run the reconciliation queries. All rows match.
+2. Run the job again without changing any file. `count(*)` on `bronze.sgs_raw` and `bronze.ptax_raw` stays the same.
 3. Upload one year file again with `uv run python -m ingestion.upload push`, then run the job. The count goes up by one row for each file that was rewritten, and the new row has a later `source_file_modification_time`.
-4. `DESCRIBE TABLE EXTENDED bronze.sgs_raw` shows the table comment and a comment on every column.
+4. `DESCRIBE TABLE EXTENDED bronze.sgs_raw` and `bronze.ptax_raw` show the table comment and a comment on every column.
 
 ## Verified
 
@@ -92,3 +129,13 @@ Full history, checked on 2026-11-23 after run 45113207172 of the ingest workflow
 | 433 | 32 | 1995 | 382 |
 
 SGS returned "Value(s) not found" for series 432 from 1995 to 1998, so those windows wrote no file.
+
+### PTAX
+
+Run from a laptop on 2026-11-23 (UTC) against the Free Edition workspace, with the same commands the workflow runs. The state files were pulled first, and the SGS state was not touched.
+
+- `ingestion.ptax backfill --from 1984-01-01` wrote 43 year files (1984 to 2026) and `_state/ptax.json` with `{"usd": "2026-11-19"}`. The files hold 10514 records, the same count the API returned for the whole range in one request.
+- After `ingestion.upload push` and the first run of the `bronze` job, `bronze.ptax_raw` had 43 rows for 43 files, each read once, and `_rescued_data` was empty. The PTAX reconciliation matched for all 43 files, 10514 records in the files and in the table. The 2025 payload keeps the rates as JSON numbers (`"cotacaoCompra":6.208`).
+- `ingestion.ptax incremental` with a fresh pull fetched one window (2026), wrote `ptax/year=2026.json` and left the watermark at 2026-11-19. After the next job run the table had 44 rows. The extra row is for `year=2026.json`, now read twice, with a later `source_file_modification_time` on the second row. No other file was read again. `bronze.sgs_raw` stayed at 140 rows for 124 files.
+- `DESCRIBE TABLE EXTENDED bronze.ptax_raw` showed the table comment and a comment on all 9 columns.
+- `dbt source freshness` passed for `ptax_raw` and `sgs_raw`, and the two `not_null` tests on `ptax_raw` passed.
