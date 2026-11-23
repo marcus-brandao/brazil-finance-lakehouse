@@ -21,6 +21,9 @@ def test_creates_the_job_when_it_does_not_exist():
     task = w.jobs.create.call_args.kwargs["tasks"][0]
     assert task.spark_python_task.parameters == ["--catalog", "lakehouse"]
     assert task.spark_python_task.python_file.endswith("/bronze_sgs.py")
+    environment = w.jobs.create.call_args.kwargs["environments"][0]
+    assert task.environment_key == environment.environment_key
+    assert environment.spec.environment_version
 
 
 def test_updates_the_job_when_it_exists():
