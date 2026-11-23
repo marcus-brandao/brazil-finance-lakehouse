@@ -28,10 +28,26 @@ Landing files have to be deterministic, because a re-run must overwrite the same
 - The connector writes to a local directory (`out/` by default) laid out as the landing Volume. The uploader (#12) moves it to the Volume and reads and writes the state file there.
 - Config is TOML, read with the standard library `tomllib`. No new dependency.
 
+### Where the state lives
+
+The state file is `_state/sgs.json` on the landing Volume, next to the files it describes.
+
+- The uploader pushes it last, so a failed upload never moves the watermark past data that did not land. That order only protects anything if the state and the data go to the same place through the same tool.
+- Actions already has a token that can write to the Volume, so nothing new needs setting up.
+- A rebuilt workspace starts with no files and no state, so the two stay consistent.
+
+Alternatives considered:
+
+- GitHub Actions cache: the docs say entries not accessed for 7 days are removed, and the retention setting also defaults to 7 days. A week without a run would lose the watermarks. Artifacts last 90 days by default, but they belong to a run, and reading one needs an API download of the last run's artifact.
+- A file committed to the repo: it needs write access, and `ingest.yml` has `contents: read`. It would also add a commit per day.
+- A Delta table: reading and writing one row from Actions needs the SQL warehouse, which is one 2X-Small and counts against the quota.
+- The newest date in bronze: it needs a query before every run, and bronze holds several copies of each rewritten file.
+
 ## Consequences
 
 - Telling "no data" from "unknown series" depends on the text "Value(s) not found" in the error body. If BCB rewords it, empty windows fail the run instead of being skipped, and the error shows up in the first scheduled run.
 - Each run rewrites a few whole-year files, which is little data. A year file can change after it was first written (revised values), so bronze keeps duplicates and silver keeps the row with the latest `ingested_at` per series and date.
 - The lookback is in days for every series. Series 433 is monthly and uses 95 days, about three months, which covers its revisions without month arithmetic.
 - Pull the state file before any run that writes state, backfills included. A backfill on an empty disk writes a state file with only its own series, and the upload would replace the full state on the Volume.
+- If the state file is deleted, `incremental` fails with "run backfill" until a backfill rewrites it.
 - When the 304 fallback runs, `payload` is the rows of two API responses joined in date order. For 432 and 1 in 2026 they equal the full-year rows (compared with the 200 answer for the same year without `formato`). If BCB starts answering 304 to half years as well, the run fails and needs another look.
