@@ -48,7 +48,7 @@ The step summary of every run has the link to the Databricks job run, also when 
 
 Run on GitHub on 2026-11-23 (UTC).
 
-- Check 1: run 45095844945 (backfill, 2024, series 433) was green.
+- Check 1: run 45095844945 (backfill, 2024, series 433) was green. The step summary of a run shows "Bronze job run" with the link to the Databricks run, then "Bronze job succeeded".
 - Check 2: run 45095977203 (series 99999) failed at the fetch step with "series 99999 is not in the config" and uploaded nothing.
 - Run 45097032913 (incremental, all series) was green.
 - Run 45113207172 backfilled all four series from 1995-01-01 in 2m56s and uploaded 124 year files plus the state file. The reconciliation query in bronze.md matched for every file.
